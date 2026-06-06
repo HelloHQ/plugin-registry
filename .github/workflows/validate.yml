@@ -1,0 +1,58 @@
+name: validate
+
+on:
+  pull_request:
+    paths:
+      - "plugins/**"
+      - "schema/**"
+      - ".github/workflows/validate.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install validators
+        run: npm install -g ajv-cli ajv-formats
+
+      - name: Validate manifests against schema
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          fail=0
+          for manifest in plugins/*/manifest.json; do
+            dir="$(basename "$(dirname "$manifest")")"
+            echo "::group::$manifest"
+
+            # 1. JSON Schema
+            if ! ajv validate -c ajv-formats \
+                 -s schema/manifest.schema.json -d "$manifest" --strict=false; then
+              echo "::error file=$manifest::schema validation failed"; fail=1
+            fi
+
+            # 2. Directory name == id
+            id="$(node -p "require('./$manifest').id")"
+            if [ "$id" != "$dir" ]; then
+              echo "::error file=$manifest::id '$id' != directory '$dir'"; fail=1
+            fi
+
+            # 3. Hash verification (skipped for placeholder all-zero hashes)
+            url="$(node -p "require('./$manifest').wasm_url")"
+            want="$(node -p "require('./$manifest').content_hash_sha256")"
+            if [ "$want" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
+              echo "placeholder hash — skipping download"
+            else
+              curl -fsSL "$url" -o /tmp/plugin.bin
+              got="$(sha256sum /tmp/plugin.bin | cut -d' ' -f1)"
+              if [ "$got" != "$want" ]; then
+                echo "::error file=$manifest::hash mismatch want=$want got=$got"; fail=1
+              fi
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail

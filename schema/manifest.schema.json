@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HelloHQ/plugin-registry/schema/manifest.schema.json",
+  "title": "HelloHQ Plugin Manifest",
+  "description": "One manifest.json per plugin lives at plugins/<id>/manifest.json. Validated by registry CI on every PR.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "version",
+    "description",
+    "author",
+    "author_url",
+    "repo",
+    "license",
+    "min_host_version",
+    "wasm_url",
+    "content_hash_sha256",
+    "permissions"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Reverse-domain identifier. Frozen at first submission. The 'hellohq.' prefix is reserved for Official plugins.",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$",
+      "maxLength": 128
+    },
+    "name": { "type": "string", "maxLength": 60 },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "description": { "type": "string", "maxLength": 200 },
+    "author": { "type": "string", "minLength": 1 },
+    "author_url": { "type": "string", "format": "uri" },
+    "repo": { "type": "string", "format": "uri" },
+    "license": { "type": "string", "minLength": 1 },
+    "categories": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "enum": [
+          "analytics",
+          "import",
+          "export",
+          "productivity",
+          "finance",
+          "reporting",
+          "utilities",
+          "charts",
+          "integration"
+        ]
+      }
+    },
+    "min_host_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "execution_mode": {
+      "enum": ["wasm", "sidecar"],
+      "default": "wasm",
+      "description": "sidecar (Tier 1 Python) requires Verified tier and is desktop-only."
+    },
+    "network": {
+      "type": "object",
+      "description": "v2. Required when permissions includes network:fetch.",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_origins": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "wasm_url": { "type": "string", "format": "uri" },
+    "content_hash_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex SHA-256 of the file at wasm_url. Verified by CI and by the app before every execution."
+    },
+    "ui_bundle_url": { "type": "string", "format": "uri" },
+    "ui_bundle_hash_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "ui_type": {
+      "enum": ["declarative", "webview", "headless"],
+      "default": "declarative"
+    },
+    "sidebar_icon": {
+      "type": "string",
+      "description": "24x24 single-fill SVG (URL for wasm plugins, bundle path for webview). Invalid icons fall back to a generic glyph."
+    },
+    "entry_function": { "type": "string", "default": "run" },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "enum": [
+              "read:portfolio_names",
+              "read:sheet_structure",
+              "read:asset_count",
+              "read:currency_rates",
+              "read:aggregated_values",
+              "write:external_output",
+              "read:external_input",
+              "plugin:storage",
+              "network:fetch",
+              "ai:inference"
+            ]
+          },
+          "scope": { "type": "object" }
+        },
+        "required": ["id"]
+      }
+    },
+    "publisher_signing_key_id": {
+      "type": "string",
+      "description": "Assigned by the registry team at merge. Omit on first submission."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "ui_type": { "const": "webview" } } },
+      "then": { "required": ["ui_bundle_url", "ui_bundle_hash_sha256"] }
+    },
+    {
+      "$comment": "read:aggregated_values requires an explicit portfolio scope.",
+      "if": {
+        "properties": {
+          "permissions": {
+            "contains": { "properties": { "id": { "const": "read:aggregated_values" } }, "required": ["id"] }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "permissions": {
+            "contains": {
+              "properties": {
+                "id": { "const": "read:aggregated_values" },
+                "scope": { "type": "object", "required": ["portfolios"] }
+              },
+              "required": ["id", "scope"]
+            }
+          }
+        }
+      }
+    }
+  ]
+}
