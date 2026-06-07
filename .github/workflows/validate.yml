@@ -230,11 +230,7 @@ jobs:
 
             if [ "$requires_verified" = "1" ]; then
               if [ "$tier" != "verified" ] && [ "$tier" != "official" ]; then
-                echo "::error file=$manifest::This manifest declares Verified-only \
-capabilities (sidecar / ai:inference / write:external_output / webview UI) \
-but trust_tier='$tier'. The registry team sets trust_tier: verified in the \
-manifest at merge after completing Verified review. Community-submitted PRs \
-cannot self-declare these capabilities."
+                echo "::error file=$manifest::Verified-only capabilities declared (sidecar/ai:inference/write:external_output/webview) but trust_tier='$tier'. The registry team sets trust_tier: verified at merge — community PRs cannot self-declare these capabilities."
                 fail=1
               else
                 echo "  trust_tier: $tier ✅"
