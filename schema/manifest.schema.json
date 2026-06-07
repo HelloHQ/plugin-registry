@@ -120,6 +120,31 @@
       "enum": ["community", "verified", "official"],
       "description": "Assigned by the registry team at merge — do not set this yourself. Governs which capabilities the plugin may declare. community (default): Wasm-only, declarative/headless UI, no ai:inference, no write:external_output, no sidecar. verified: unlocks sidecar execution, ai:inference, write:external_output, and webview UI after manual Verified review. official: HelloHQ first-party plugins (hellohq.* id prefix)."
     },
+    "provenance": {
+      "enum": ["core", "community", "enterprise"],
+      "default": "community",
+      "description": "Who built the plugin. 'core' is reserved for HelloHQ (requires an official signature) and is rejected from outside authors by CI. 'enterprise' is private to the org that built it and MUST NOT appear in the public registry — CI rejects it (see REVIEW_POLICY). Defaults to community."
+    },
+    "licensing": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Open-source vs commercial status. Surfaced as a badge in the in-app Plugin Browser so users see licensing before installing.",
+      "properties": {
+        "kind": { "enum": ["open_source", "commercial"], "default": "open_source" },
+        "spdx": {
+          "type": "string",
+          "description": "SPDX licence identifier for open-source plugins, e.g. MIT, Apache-2.0."
+        },
+        "product_id": {
+          "type": "string",
+          "description": "HelloHQ-brokered marketplace SKU. Required when kind == commercial."
+        },
+        "price_cents": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "default": "USD" },
+        "pricing_model": { "enum": ["one_time", "subscription"] },
+        "info_url": { "type": "string", "format": "uri" }
+      }
+    },
     "publisher_signing_key_id": {
       "type": "string",
       "description": "Assigned by the registry team at merge. Omit on first submission."
@@ -150,6 +175,23 @@
               "required": ["id", "scope"]
             }
           }
+        }
+      }
+    },
+    {
+      "$comment": "Commercial plugins must carry a HelloHQ-brokered marketplace SKU.",
+      "if": {
+        "properties": {
+          "licensing": {
+            "properties": { "kind": { "const": "commercial" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["licensing"]
+      },
+      "then": {
+        "properties": {
+          "licensing": { "required": ["product_id"] }
         }
       }
     }

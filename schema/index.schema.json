@@ -37,6 +37,24 @@
           "type": "string",
           "enum": ["community", "verified", "official"]
         },
+        "provenance": {
+          "type": "string",
+          "enum": ["core", "community", "enterprise"],
+          "description": "Who built the plugin. Drives the provenance badge in the Plugin Browser."
+        },
+        "licensing": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "At-a-glance open-source vs commercial status for the catalog badge. Authoritative copy is in the manifest.",
+          "properties": {
+            "kind": { "type": "string", "enum": ["open_source", "commercial"] },
+            "spdx": { "type": "string" },
+            "product_id": { "type": "string" },
+            "price_cents": { "type": "integer", "minimum": 0 },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "pricing_model": { "type": "string", "enum": ["one_time", "subscription"] }
+          }
+        },
         "manifest_url": {
           "type": "string",
           "format": "uri",

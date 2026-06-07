@@ -258,6 +258,46 @@ jobs:
               echo "  v2 capability with min_host_version $mhv ✅"
             fi
 
+            # ── 6c. Provenance + licensing rules ────────────────────────────
+            #
+            # provenance answers "who built it"; licensing answers "how it's
+            # licensed". Both are orthogonal to trust_tier.
+            #
+            #   enterprise  — private to the org that built it; NEVER public.
+            #   core        — HelloHQ first-party; reserved (tied to the
+            #                 maintainer-set trust_tier: official, so a
+            #                 submitter cannot self-declare it).
+            #   commercial  — sold via the HelloHQ-brokered marketplace; held
+            #                 until that backend ships.
+            prov=$(node -p "require('./$manifest').provenance||'community'")
+            lkind=$(node -p "(require('./$manifest').licensing||{}).kind||'open_source'")
+
+            if [ "$prov" = "enterprise" ]; then
+              echo "::error file=$manifest::provenance 'enterprise' plugins are private and must not be submitted to the public registry"
+              fail=1
+            fi
+
+            if [ "$prov" = "core" ] && [ "$tier" != "official" ]; then
+              echo "::error file=$manifest::provenance 'core' is reserved for HelloHQ (requires trust_tier: official, which the registry team sets at merge)"
+              fail=1
+            fi
+
+            if [ "$lkind" = "commercial" ]; then
+              echo "::error file=$manifest::commercial licensing is not yet available — the HelloHQ-brokered marketplace has not shipped. Publish as open_source for now."
+              fail=1
+            fi
+
+            if [ "$lkind" = "open_source" ]; then
+              spdx=$(node -p "((require('./$manifest').licensing||{}).spdx)||''")
+              if [ -z "$spdx" ]; then
+                echo "::warning file=$manifest::open-source plugin has no licensing.spdx — add one (e.g. MIT, Apache-2.0) so users see the licence"
+              else
+                echo "  provenance: $prov, licensing: $lkind ($spdx) ✅"
+              fi
+            else
+              echo "  provenance: $prov, licensing: $lkind ✅"
+            fi
+
             # ── 7. SHA-256 hash + Wasm binary validity ──────────────────────
             wasm_url=$(node -p "require('./$manifest').wasm_url")
             want_hash=$(node -p "require('./$manifest').content_hash_sha256")

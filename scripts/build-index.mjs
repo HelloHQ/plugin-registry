@@ -22,7 +22,7 @@ for (const dir of readdirSync(PLUGINS_DIR, { withFileTypes: true })) {
   } catch {
     continue; // a directory without a manifest is ignored
   }
-  entries.push({
+  const entry = {
     id: m.id,
     name: m.name,
     version: m.version,
@@ -30,11 +30,24 @@ for (const dir of readdirSync(PLUGINS_DIR, { withFileTypes: true })) {
     author: m.author ?? '',
     categories: m.categories ?? [],
     trust_tier: m.trust_tier ?? 'community',
+    provenance: m.provenance ?? 'community',
     manifest_url: `${RAW_BASE}/plugins/${m.id}/manifest.json`,
     permissions: (m.permissions ?? []).map((p) =>
       typeof p === 'string' ? p : p.id,
     ),
-  });
+  };
+  // Carry a compact licensing summary for the catalog badge (the manifest
+  // holds the authoritative copy). Defaults to open-source.
+  const lic = m.licensing ?? {};
+  entry.licensing = {
+    kind: lic.kind ?? 'open_source',
+    ...(lic.spdx != null ? { spdx: lic.spdx } : {}),
+    ...(lic.product_id != null ? { product_id: lic.product_id } : {}),
+    ...(lic.price_cents != null ? { price_cents: lic.price_cents } : {}),
+    ...(lic.currency != null ? { currency: lic.currency } : {}),
+    ...(lic.pricing_model != null ? { pricing_model: lic.pricing_model } : {}),
+  };
+  entries.push(entry);
 }
 
 entries.sort((a, b) => a.id.localeCompare(b.id));

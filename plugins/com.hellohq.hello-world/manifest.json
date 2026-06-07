@@ -15,6 +15,9 @@
   "ui_type": "declarative",
   "sidebar_icon": "https://github.com/HelloHQ/plugin-sdk/releases/download/hello-world-v1.0.0/icon.svg",
   "entry_function": "run",
+  "trust_tier": "official",
+  "provenance": "core",
+  "licensing": { "kind": "open_source", "spdx": "Apache-2.0" },
   "permissions": [
     { "id": "read:portfolio_names" }
   ]
