@@ -91,13 +91,13 @@ jobs:
           const schema = require('./schema/manifest.schema.json');
           const ajv = new AjvClass({ strict: false });
           addFormats(ajv);
-          const ok = ajv.validateSchema(schema);
-          if (!ok) {
-            console.error('schema/manifest.schema.json failed self-validation:');
-            console.error(JSON.stringify(ajv.errors, null, 2));
+          try {
+            ajv.compile(schema);
+            console.log('✅ manifest.schema.json compiles cleanly');
+          } catch (e) {
+            console.error('Failed to compile schema:', e.message);
             process.exit(1);
           }
-          console.log('✅ manifest.schema.json compiles cleanly');
           "
 
       # ── Per-manifest checks ─────────────────────────────────────────────────
@@ -122,7 +122,7 @@ jobs:
             echo "::group::$manifest"
 
             # ── 1. JSON Schema validation ───────────────────────────────────
-            if ! ajv validate -c ajv-formats \
+            if ! ajv validate --spec=draft2020 -c ajv-formats \
                  -s schema/manifest.schema.json -d "$manifest" --strict=false; then
               echo "::error file=$manifest::JSON Schema validation failed"
               fail=1
