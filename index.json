@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "com.hellohq.hello-world",
+      "name": "Hello World",
+      "version": "1.0.0",
+      "description": "A minimal reference plugin that lists your portfolio names.",
+      "author": "HelloHQ",
+      "categories": [
+        "utilities"
+      ],
+      "trust_tier": "community",
+      "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.hellohq.hello-world/manifest.json",
+      "permissions": [
+        "read:portfolio_names"
+      ]
+    }
+  ]
+}

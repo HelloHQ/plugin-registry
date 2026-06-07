@@ -5,12 +5,16 @@ on:
     paths:
       - "plugins/**"
       - "schema/**"
+      - "index.json"
+      - "scripts/**"
       - ".github/workflows/validate.yml"
   push:
     branches: [main]
     paths:
       - "plugins/**"
       - "schema/**"
+      - "index.json"
+      - "scripts/**"
 
 jobs:
 
@@ -237,6 +241,26 @@ cannot self-declare these capabilities."
               fi
             fi
 
+            # ── 6b. v2 capabilities require min_host_version >= 2.0.0 ───────
+            # ai:inference, plugin:storage, network:fetch, and sidecar execution
+            # are v2 host features. A manifest that declares any of them must
+            # gate on a 2.x host so older hosts never try to run it.
+            mhv=$(node -p "require('./$manifest').min_host_version")
+            mhv_major=$(printf '%s' "$mhv" | cut -d. -f1)
+            needs_v2=0
+            [ "$mode" = "sidecar" ] && needs_v2=1
+            for v2perm in "ai:inference" "plugin:storage" "network:fetch"; do
+              has=$(node -p \
+                "(require('./$manifest').permissions||[]).some(p=>p.id==='$v2perm')")
+              [ "$has" = "true" ] && needs_v2=1
+            done
+            if [ "$needs_v2" = "1" ] && [ "${mhv_major:-0}" -lt 2 ]; then
+              echo "::error file=$manifest::declares a v2 capability (sidecar / ai:inference / plugin:storage / network:fetch) but min_host_version='$mhv' (<2.0.0)"
+              fail=1
+            elif [ "$needs_v2" = "1" ]; then
+              echo "  v2 capability with min_host_version $mhv ✅"
+            fi
+
             # ── 7. SHA-256 hash + Wasm binary validity ──────────────────────
             wasm_url=$(node -p "require('./$manifest').wasm_url")
             want_hash=$(node -p "require('./$manifest').content_hash_sha256")
@@ -289,3 +313,39 @@ cannot self-declare these capabilities."
             echo "::endgroup::"
           done
           exit $fail
+
+      # ── Registry index (index.json) ───────────────────────────────────────
+      # The HelloHQ app's Plugin Browser fetches index.json. It is generated
+      # from the manifests, so it must (a) be valid against its schema,
+      # (b) be regenerated whenever a manifest changes, and (c) only reference
+      # plugins that actually exist with matching versions.
+      - name: Validate registry index.json
+        run: |
+          set -euo pipefail
+
+          # (a) schema
+          ajv validate -c ajv-formats \
+            -s schema/index.schema.json -d index.json --strict=false
+
+          # (b) up to date with the manifests
+          node scripts/build-index.mjs --check
+
+          # (c) every entry resolves to a real manifest with a matching version
+          node -e "
+          const fs = require('fs');
+          const idx = require('./index.json');
+          let fail = 0;
+          for (const e of idx.plugins) {
+            const p = 'plugins/' + e.id + '/manifest.json';
+            if (!fs.existsSync(p)) {
+              console.error('index entry has no manifest: ' + e.id); fail = 1; continue;
+            }
+            const m = require('./' + p);
+            if (m.version !== e.version) {
+              console.error('index version mismatch for ' + e.id + ': index=' + e.version + ' manifest=' + m.version);
+              fail = 1;
+            }
+          }
+          process.exit(fail);
+          "
+          echo '✅ index.json valid, current, and consistent'

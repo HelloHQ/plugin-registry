@@ -1,0 +1,12 @@
+# Every plugin submission, schema change, generated index, and CI/governance
+# change requires review from the registry maintainers.
+#
+# This is what makes trust-tier gating real (see .github/workflows/validate.yml,
+# step 6): a submitter cannot self-elevate trust_tier because the manifest change
+# cannot merge without a maintainer's approving review.
+
+/plugins/                 @HelloHQ/plugin-maintainers
+/schema/                  @HelloHQ/plugin-maintainers
+/index.json               @HelloHQ/plugin-maintainers
+/scripts/                 @HelloHQ/plugin-maintainers
+/.github/                 @HelloHQ/plugin-maintainers

@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/schema/index.schema.json",
+  "title": "HelloHQ Plugin Registry Index",
+  "description": "The catalog of published plugins consumed by the HelloHQ app's Plugin Browser. Generated from plugins/*/manifest.json by scripts/build-index.mjs.",
+  "type": "object",
+  "required": ["schema_version", "plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "plugins": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/entry" }
+    }
+  },
+  "definitions": {
+    "entry": {
+      "type": "object",
+      "required": ["id", "name", "version", "manifest_url"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$",
+          "description": "Reverse-DNS plugin id, e.g. com.example.budget-importer"
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+].+)?$"
+        },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "trust_tier": {
+          "type": "string",
+          "enum": ["community", "verified", "official"]
+        },
+        "manifest_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Raw URL of this plugin's manifest.json within the registry"
+        },
+        "permissions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Inline permission ids for at-a-glance display; authoritative set is in the manifest"
+        }
+      }
+    }
+  }
+}
