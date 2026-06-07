@@ -60,7 +60,7 @@
     "execution_mode": {
       "enum": ["wasm", "sidecar"],
       "default": "wasm",
-      "description": "sidecar (Tier 1 Python) requires Verified tier and is desktop-only."
+      "description": "sidecar (Tier 1 Python) requires trust_tier: verified and is desktop-only."
     },
     "network": {
       "type": "object",
@@ -115,6 +115,10 @@
         },
         "required": ["id"]
       }
+    },
+    "trust_tier": {
+      "enum": ["community", "verified", "official"],
+      "description": "Assigned by the registry team at merge — do not set this yourself. Governs which capabilities the plugin may declare. community (default): Wasm-only, declarative/headless UI, no ai:inference, no write:external_output, no sidecar. verified: unlocks sidecar execution, ai:inference, write:external_output, and webview UI after manual Verified review. official: HelloHQ first-party plugins (hellohq.* id prefix)."
     },
     "publisher_signing_key_id": {
       "type": "string",

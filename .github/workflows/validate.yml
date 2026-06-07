@@ -6,53 +6,286 @@ on:
       - "plugins/**"
       - "schema/**"
       - ".github/workflows/validate.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - "schema/**"
 
 jobs:
-  validate:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # PR scope guard: one plugin directory per PR.
+  #
+  # Bundle PRs are rejected immediately so every plugin gets independent review.
+  # Runs only on pull_request; the validate job handles the always-on checks.
+  # ────────────────────────────────────────────────────────────────────────────
+  scope:
+    name: PR scope — one plugin per PR
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure exactly one plugin directory changed
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
+            | grep '^plugins/' \
+            | cut -d/ -f2 \
+            | sort -u \
+            | grep -v '^$' || true)
+          count=$(printf '%s' "$changed" | grep -c '[^[:space:]]' || true)
+          if [ "$count" -gt 1 ]; then
+            echo "::error::PR touches $count plugin directories: $(printf '%s ' $changed)"
+            echo "Open a separate PR for each plugin."
+            exit 1
+          fi
+          echo "✅ Scope: ${changed:-(no plugin changes in this PR)}"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Per-manifest validation.
+  #
+  # Runs after scope passes (PR) or unconditionally on push to main.
+  # The `if: always()` guard lets it run even when scope was skipped (push).
+  # ────────────────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate manifests
+    runs-on: ubuntu-latest
+    needs: [scope]
+    if: always() && (needs.scope.result == 'success' || needs.scope.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed for version-increment comparison
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
+      # ajv@8 local install for the schema self-check script (draft-2020-12).
+      # ajv-cli global install for the `ajv validate` command in the main loop.
+      # wabt provides `wasm-validate` for Wasm binary format checking.
       - name: Install validators
-        run: npm install -g ajv-cli ajv-formats
+        run: |
+          npm install ajv@8 ajv-formats
+          npm install -g ajv-cli ajv-formats
+          sudo apt-get install -y wabt
 
-      - name: Validate manifests against schema
+      # ── Schema self-validation ──────────────────────────────────────────────
+      # AJV's validateSchema() catches broken $ref, unknown keywords, malformed
+      # patterns, and allOf/if-then logic errors in the schema itself.
+      - name: Validate manifest.schema.json compiles (AJV draft-2020-12)
+        run: |
+          node -e "
+          const Ajv = require('./node_modules/ajv/dist/2020');
+          const AjvClass = Ajv.default || Ajv;
+          const addFormats = require('./node_modules/ajv-formats');
+          const schema = require('./schema/manifest.schema.json');
+          const ajv = new AjvClass({ strict: false });
+          addFormats(ajv);
+          const ok = ajv.validateSchema(schema);
+          if (!ok) {
+            console.error('schema/manifest.schema.json failed self-validation:');
+            console.error(JSON.stringify(ajv.errors, null, 2));
+            process.exit(1);
+          }
+          console.log('✅ manifest.schema.json compiles cleanly');
+          "
+
+      # ── Per-manifest checks ─────────────────────────────────────────────────
+      - name: Validate all manifests
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           fail=0
+
+          # Semver comparison via GNU sort -V.
+          # Returns 0 (true) if $1 is strictly greater than $2.
+          semver_gt() {
+            [ "$1" != "$2" ] && \
+              [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
+          }
+
           for manifest in plugins/*/manifest.json; do
             dir="$(basename "$(dirname "$manifest")")"
             echo "::group::$manifest"
 
-            # 1. JSON Schema
+            # ── 1. JSON Schema validation ───────────────────────────────────
             if ! ajv validate -c ajv-formats \
                  -s schema/manifest.schema.json -d "$manifest" --strict=false; then
-              echo "::error file=$manifest::schema validation failed"; fail=1
+              echo "::error file=$manifest::JSON Schema validation failed"
+              fail=1
             fi
 
-            # 2. Directory name == id
+            # ── 2. Directory name == id ─────────────────────────────────────
             id="$(node -p "require('./$manifest').id")"
             if [ "$id" != "$dir" ]; then
-              echo "::error file=$manifest::id '$id' != directory '$dir'"; fail=1
+              echo "::error file=$manifest::id '$id' does not match directory '$dir'"
+              fail=1
             fi
 
-            # 3. Hash verification (skipped for placeholder all-zero hashes)
-            url="$(node -p "require('./$manifest').wasm_url")"
-            want="$(node -p "require('./$manifest').content_hash_sha256")"
-            if [ "$want" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
-              echo "placeholder hash — skipping download"
-            else
-              curl -fsSL "$url" -o /tmp/plugin.bin
-              got="$(sha256sum /tmp/plugin.bin | cut -d' ' -f1)"
-              if [ "$got" != "$want" ]; then
-                echo "::error file=$manifest::hash mismatch want=$want got=$got"; fail=1
+            # ── 3. Version increment (PR only) ──────────────────────────────
+            # The submitted version must be strictly greater than the version
+            # already on the base branch.  New plugins (not present on the base
+            # branch yet) are exempt.
+            if [ "$EVENT_NAME" = "pull_request" ]; then
+              git show "origin/${BASE_REF}:${manifest}" > /tmp/base-manifest.json 2>/dev/null || true
+              if [ -s /tmp/base-manifest.json ]; then
+                base_ver=$(node -p "require('/tmp/base-manifest.json').version")
+                cur_ver=$(node -p "require('./$manifest').version")
+                if ! semver_gt "$cur_ver" "$base_ver"; then
+                  echo "::error file=$manifest::version must strictly increase: $base_ver -> $cur_ver (use a higher semver)"
+                  fail=1
+                else
+                  echo "  version: $base_ver -> $cur_ver ✅"
+                fi
+              else
+                echo "  version: new plugin — no base-branch version to compare"
               fi
             fi
+
+            # ── 4. network:fetch requires network.allowed_origins ───────────
+            has_net_fetch=$(node -p \
+              "(require('./$manifest').permissions||[]).some(p=>p.id==='network:fetch')")
+            if [ "$has_net_fetch" = "true" ]; then
+              origins_len=$(node -p \
+                "((require('./$manifest').network||{}).allowed_origins||[]).length")
+              if [ "$origins_len" = "0" ]; then
+                echo "::error file=$manifest::network:fetch permission requires a non-empty network.allowed_origins list"
+                fail=1
+              else
+                echo "  network:fetch with $origins_len allowed origin(s) ✅"
+              fi
+            fi
+
+            # ── 5. webview UI requires ui_bundle_url ────────────────────────
+            # The JSON Schema allOf already enforces this at the structural
+            # level; this step emits a clearer error message when violated.
+            ui_type=$(node -p "require('./$manifest').ui_type||'declarative'")
+            if [ "$ui_type" = "webview" ]; then
+              ui_bundle_url=$(node -p "require('./$manifest').ui_bundle_url||''")
+              if [ -z "$ui_bundle_url" ]; then
+                echo "::error file=$manifest::ui_type 'webview' requires ui_bundle_url (and ui_bundle_hash_sha256)"
+                fail=1
+              fi
+            fi
+
+            # ── 6. Trust-tier enforcement — removing the honour system ──────
+            #
+            # HOW THIS REMOVES THE HONOUR SYSTEM:
+            #
+            # Certain capabilities can harm users if misused (sidecar runs
+            # native Python, ai:inference is expensive, write:external_output
+            # exfiltrates data, webview renders arbitrary HTML).  Previously,
+            # any submitter could declare these by just writing them in the
+            # manifest — the honour system.
+            #
+            # Now: CI checks trust_tier against the capabilities declared.
+            # trust_tier is set by the REGISTRY TEAM in the manifest at merge,
+            # not by the submitter.  Community submissions that declare
+            # Verified-only capabilities fail CI and cannot merge.  A PR only
+            # passes once a maintainer has reviewed it and explicitly set
+            # trust_tier: verified in the file — making that act the gate
+            # rather than a human promise.
+            #
+            # CODEOWNERS should also require maintainer approval on all
+            # plugins/*/manifest.json changes so no self-elevation is possible
+            # even if a submitter edits trust_tier in their own PR.
+            #
+            # Verified-only capabilities:
+            #   execution_mode: sidecar     — arbitrary Python on the host
+            #   ai:inference                — on-device AI inference
+            #   write:external_output       — data exfiltration vector
+            #   ui_type: webview            — arbitrary web content in-app
+            tier=$(node -p "require('./$manifest').trust_tier||'community'")
+            mode=$(node -p "require('./$manifest').execution_mode||'wasm'")
+            requires_verified=0
+
+            if [ "$mode" = "sidecar" ]; then
+              requires_verified=1
+              echo "  ⚠ execution_mode: sidecar (Verified-only)"
+            fi
+            for vperm in "ai:inference" "write:external_output"; do
+              has=$(node -p \
+                "(require('./$manifest').permissions||[]).some(p=>p.id==='$vperm')")
+              if [ "$has" = "true" ]; then
+                requires_verified=1
+                echo "  ⚠ permission '$vperm' (Verified-only)"
+              fi
+            done
+            if [ "$ui_type" = "webview" ]; then
+              requires_verified=1
+              echo "  ⚠ ui_type: webview (Verified-only)"
+            fi
+
+            if [ "$requires_verified" = "1" ]; then
+              if [ "$tier" != "verified" ] && [ "$tier" != "official" ]; then
+                echo "::error file=$manifest::This manifest declares Verified-only \
+capabilities (sidecar / ai:inference / write:external_output / webview UI) \
+but trust_tier='$tier'. The registry team sets trust_tier: verified in the \
+manifest at merge after completing Verified review. Community-submitted PRs \
+cannot self-declare these capabilities."
+                fail=1
+              else
+                echo "  trust_tier: $tier ✅"
+              fi
+            fi
+
+            # ── 7. SHA-256 hash + Wasm binary validity ──────────────────────
+            wasm_url=$(node -p "require('./$manifest').wasm_url")
+            want_hash=$(node -p "require('./$manifest').content_hash_sha256")
+            placeholder="0000000000000000000000000000000000000000000000000000000000000000"
+
+            if [ "$want_hash" = "$placeholder" ]; then
+              echo "  placeholder hash — skipping download, hash, and wasm-validate"
+            else
+              if ! curl -fsSL --max-time 60 "$wasm_url" -o /tmp/plugin.wasm; then
+                echo "::error file=$manifest::failed to download wasm_url: $wasm_url"
+                fail=1
+              else
+                # Hash
+                got_hash=$(sha256sum /tmp/plugin.wasm | cut -d' ' -f1)
+                if [ "$got_hash" != "$want_hash" ]; then
+                  echo "::error file=$manifest::SHA-256 mismatch: want $want_hash got $got_hash"
+                  fail=1
+                else
+                  echo "  SHA-256: $want_hash ✅"
+                fi
+
+                # Wasm binary validity (wabt wasm-validate)
+                if ! wasm-validate /tmp/plugin.wasm 2>&1; then
+                  echo "::error file=$manifest::wasm-validate failed — binary is not valid WebAssembly"
+                  fail=1
+                else
+                  echo "  wasm-validate ✅"
+                fi
+              fi
+            fi
+
+            # ── 8. URL reachability ─────────────────────────────────────────
+            # wasm_url reachability is already proven by the download above.
+            # Check ui_bundle_url for webview plugins via a HEAD request.
+            # Failures are warnings, not errors: some CDNs reject HEAD even
+            # when GET works fine.
+            if [ "$ui_type" = "webview" ]; then
+              ui_bundle_url=$(node -p "require('./$manifest').ui_bundle_url||''")
+              ui_hash=$(node -p \
+                "require('./$manifest').ui_bundle_hash_sha256||'$placeholder'")
+              if [ -n "$ui_bundle_url" ] && [ "$ui_hash" != "$placeholder" ]; then
+                if ! curl -fsSI --max-time 15 "$ui_bundle_url" -o /dev/null 2>&1; then
+                  echo "::warning file=$manifest::ui_bundle_url HEAD request failed — URL may be unreachable: $ui_bundle_url"
+                else
+                  echo "  ui_bundle_url reachable ✅"
+                fi
+              fi
+            fi
+
             echo "::endgroup::"
           done
           exit $fail
