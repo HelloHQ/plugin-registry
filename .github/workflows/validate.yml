@@ -155,14 +155,16 @@ jobs:
               fi
             fi
 
-            # ── 4. network:fetch requires network.allowed_origins ───────────
+            # ── 4. network:fetch requires a non-empty scope.origins ─────────
+            # The app reads the allowlist from the network:fetch permission's
+            # own scope (scope.origins), never from a top-level block.
             has_net_fetch=$(node -p \
               "(require('./$manifest').permissions||[]).some(p=>p.id==='network:fetch')")
             if [ "$has_net_fetch" = "true" ]; then
               origins_len=$(node -p \
-                "((require('./$manifest').network||{}).allowed_origins||[]).length")
+                "(((require('./$manifest').permissions||[]).find(p=>p.id==='network:fetch')||{}).scope||{}).origins?.length||0")
               if [ "$origins_len" = "0" ]; then
-                echo "::error file=$manifest::network:fetch permission requires a non-empty network.allowed_origins list"
+                echo "::error file=$manifest::network:fetch permission requires a non-empty scope.origins list"
                 fail=1
               else
                 echo "  network:fetch with $origins_len allowed origin(s) ✅"

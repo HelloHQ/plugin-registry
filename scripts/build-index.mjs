@@ -6,6 +6,7 @@
 //   node scripts/build-index.mjs          # write index.json
 //   node scripts/build-index.mjs --check  # fail if index.json is out of date
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 const RAW_BASE =
@@ -17,8 +18,12 @@ for (const dir of readdirSync(PLUGINS_DIR, { withFileTypes: true })) {
   if (!dir.isDirectory()) continue;
   const manifestPath = join(PLUGINS_DIR, dir.name, 'manifest.json');
   let m;
+  let rawManifest;
   try {
-    m = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    // Hash the EXACT bytes served at manifest_url (the file on disk), so the
+    // pin matches what the app recomputes over the fetched response body.
+    rawManifest = readFileSync(manifestPath);
+    m = JSON.parse(rawManifest.toString('utf8'));
   } catch {
     continue; // a directory without a manifest is ignored
   }
@@ -32,6 +37,7 @@ for (const dir of readdirSync(PLUGINS_DIR, { withFileTypes: true })) {
     trust_tier: m.trust_tier ?? 'community',
     provenance: m.provenance ?? 'community',
     manifest_url: `${RAW_BASE}/plugins/${m.id}/manifest.json`,
+    manifest_hash_sha256: createHash('sha256').update(rawManifest).digest('hex'),
     permissions: (m.permissions ?? []).map((p) =>
       typeof p === 'string' ? p : p.id,
     ),
