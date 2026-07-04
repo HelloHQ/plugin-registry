@@ -136,12 +136,19 @@ jobs:
             fi
 
             # ── 3. Version increment (PR only) ──────────────────────────────
-            # The submitted version must be strictly greater than the version
-            # already on the base branch.  New plugins (not present on the base
-            # branch yet) are exempt.
+            # A submitted version must be strictly greater than the version
+            # already on the base branch — but ONLY for manifests this PR
+            # actually changes.  New plugins (not on the base branch yet) are
+            # exempt, and a manifest left untouched by the PR (e.g. on a
+            # schema/workflow-only PR) keeps its version even though every
+            # manifest is re-validated here.
             if [ "$EVENT_NAME" = "pull_request" ]; then
               git show "origin/${BASE_REF}:${manifest}" > /tmp/base-manifest.json 2>/dev/null || true
-              if [ -s /tmp/base-manifest.json ]; then
+              if [ ! -s /tmp/base-manifest.json ]; then
+                echo "  version: new plugin — no base-branch version to compare"
+              elif git diff --quiet "origin/${BASE_REF}...HEAD" -- "$manifest"; then
+                echo "  version: $(node -p "require('./$manifest').version") — unchanged by this PR"
+              else
                 base_ver=$(node -p "require('/tmp/base-manifest.json').version")
                 cur_ver=$(node -p "require('./$manifest').version")
                 if ! semver_gt "$cur_ver" "$base_ver"; then
@@ -150,8 +157,6 @@ jobs:
                 else
                   echo "  version: $base_ver -> $cur_ver ✅"
                 fi
-              else
-                echo "  version: new plugin — no base-branch version to compare"
               fi
             fi
 
@@ -306,7 +311,12 @@ jobs:
             placeholder="0000000000000000000000000000000000000000000000000000000000000000"
 
             if [ "$want_hash" = "$placeholder" ]; then
-              echo "  placeholder hash — skipping download, hash, and wasm-validate"
+              # SA9 (doc 59): a placeholder hash bypasses download + hash +
+              # wasm-validate, so the artifact is UNVERIFIED. Legitimate only for
+              # a first-submission bootstrap; emit a loud annotation (not a
+              # silent skip) so a reviewer must consciously accept it before
+              # merge rather than it passing unnoticed.
+              echo "::warning file=$manifest::placeholder content_hash_sha256 — wasm download/hash/validate SKIPPED; this artifact is UNVERIFIED. Acceptable only for a new-plugin bootstrap; a real hash must land before the plugin is usable."
             else
               if ! curl -fsSL --max-time 60 "$wasm_url" -o /tmp/plugin.wasm; then
                 echo "::error file=$manifest::failed to download wasm_url: $wasm_url"

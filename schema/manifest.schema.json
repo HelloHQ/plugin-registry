@@ -136,6 +136,20 @@
     "publisher_signing_key_id": {
       "type": "string",
       "description": "Assigned by the registry team at merge. Omit on first submission."
+    },
+    "signatures": {
+      "type": "array",
+      "description": "SA5 (doc 59): detached HYBRID publisher signatures over the plugin artifact (content_hash_sha256), assigned by the registry team at merge — do not set this yourself; omit on first submission. When present the app verifies EVERY entry and requires classical Ed25519 AND post-quantum ML-DSA-65 to both verify, fail-closed (see docs/plugin/50 and 59). Enforcement activates once the matching publisher trust roots are bundled in the app.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "alg": { "enum": ["ed25519", "ml-dsa-65"] },
+          "key_id": { "type": "string" },
+          "signature": { "type": "string", "description": "Base64 detached signature over the artifact bytes." }
+        },
+        "required": ["alg", "key_id", "signature"]
+      }
     }
   },
   "allOf": [
