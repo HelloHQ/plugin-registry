@@ -306,7 +306,12 @@ jobs:
             placeholder="0000000000000000000000000000000000000000000000000000000000000000"
 
             if [ "$want_hash" = "$placeholder" ]; then
-              echo "  placeholder hash — skipping download, hash, and wasm-validate"
+              # SA9 (doc 59): a placeholder hash bypasses download + hash +
+              # wasm-validate, so the artifact is UNVERIFIED. Legitimate only for
+              # a first-submission bootstrap; emit a loud annotation (not a
+              # silent skip) so a reviewer must consciously accept it before
+              # merge rather than it passing unnoticed.
+              echo "::warning file=$manifest::placeholder content_hash_sha256 — wasm download/hash/validate SKIPPED; this artifact is UNVERIFIED. Acceptable only for a new-plugin bootstrap; a real hash must land before the plugin is usable."
             else
               if ! curl -fsSL --max-time 60 "$wasm_url" -o /tmp/plugin.wasm; then
                 echo "::error file=$manifest::failed to download wasm_url: $wasm_url"
