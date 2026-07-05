@@ -30,6 +30,22 @@ The reviewer checklist:
    HelloHQ data to third parties. Justify why `ai:inference` is insufficient.
 6. **For `ai:inference`** — the system prompt cannot exfiltrate data beyond the
    plugin's data permissions, and user input cannot override the system prompt.
+7. **For a `webview` UI** — the plugin is Verified tier (a `webview` UI is never
+   fast-merged as Community). The manifest's `ui_bundle` SHA-256 matches the
+   shipped ZIP. The bundle is **self-contained**: no external CDN/script/style/
+   font origins, and no `<script src>`, `fetch`, `XMLHttpRequest`, or WebSocket
+   to any origin outside the declared `network:fetch` allowlist — the host
+   injects a CSP and `Permissions-Policy` that block these, so a bundle that
+   *depends* on them is broken and must be rejected. The bundle does not use
+   camera, microphone, or geolocation (host policy denies them).
+8. **Combined read + network (exfiltration)** — a plugin holding **both** a
+   sensitive `read:*` permission (public `read:currency_rates` excepted) **and**
+   `network:fetch` can forward what it reads off-device via `compute`→wasm to an
+   allowlisted origin. Scrutinise the pairing: every declared origin is
+   author-owned, and the plugin's stated purpose genuinely requires sending
+   portfolio-derived data there. The app surfaces this pairing to the user at
+   consent (a distinct warning naming the origins), but this registry review is
+   the gate that keeps a malicious pairing out.
 
 ## Removal
 
