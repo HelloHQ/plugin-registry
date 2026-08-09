@@ -1,0 +1,25 @@
+version: 2
+
+# Dependabot VERSION updates. Security updates are a separate, repo-level
+# setting (`automated-security-fixes`) and are already on — this file does not
+# control them and cannot turn them off.
+#
+# Added 2026-08-09 when Renovate was removed org-wide.
+#
+# github-actions is the only ecosystem: this repo publishes the signed plugin
+# index and carries no dependency manifests of its own.
+#
+# It is PUBLIC, and its `protect-main` ruleset is part of the signing
+# supply-chain posture — deliberately kept, unlike the rest of the estate which
+# commits straight to main. Dependabot opens PRs, so it works with that posture
+# rather than against it. Do not "simplify" the branch protection to speed these
+# up; the review requirement is the point.
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["deps"]
