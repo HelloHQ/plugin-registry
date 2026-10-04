@@ -7,6 +7,7 @@ on:
       - "schema/**"
       - "index.json"
       - "scripts/**"
+      - "tests/**"
       - ".github/workflows/validate.yml"
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - "schema/**"
       - "index.json"
       - "scripts/**"
+      - "tests/**"
       - ".github/workflows/validate.yml"
 
 jobs:
@@ -99,6 +101,10 @@ jobs:
             process.exit(1);
           }
           "
+
+      # Schema rules and CI helpers (propose-only permissions, tier helper).
+      - name: Schema and helper tests
+        run: node --test tests/*.test.mjs
 
       # ── Per-manifest checks ─────────────────────────────────────────────────
       - name: Validate all manifests
@@ -214,6 +220,7 @@ jobs:
             #   execution_mode: sidecar     — arbitrary Python on the host
             #   ai:inference                — on-device AI inference
             #   write:external_output       — data exfiltration vector
+            #   propose:holdings/valuations — suggests writes to the ledger
             #   ui_type: webview            — arbitrary web content in-app
             tier=$(node -p "require('./$manifest').trust_tier||'community'")
             mode=$(node -p "require('./$manifest').execution_mode||'wasm'")
@@ -231,6 +238,15 @@ jobs:
                 echo "  ⚠ permission '$vperm' (Verified-only)"
               fi
             done
+            # propose:* (propose-only writes) is matched by prefix so a future
+            # propose permission is Verified-only from its first release.
+            # Captured first so a failing helper fails the step (set -e) instead
+            # of silently yielding an empty list.
+            propose_perms="$(node scripts/verified-only-permissions.mjs "$manifest")"
+            for vperm in $propose_perms; do
+              requires_verified=1
+              echo "  ⚠ permission '$vperm' (Verified-only)"
+            done
             if [ "$ui_type" = "webview" ]; then
               requires_verified=1
               echo "  ⚠ ui_type: webview (Verified-only)"
@@ -238,7 +254,7 @@ jobs:
 
             if [ "$requires_verified" = "1" ]; then
               if [ "$tier" != "verified" ] && [ "$tier" != "official" ]; then
-                echo "::error file=$manifest::Verified-only capabilities declared (sidecar/ai:inference/write:external_output/webview) but trust_tier='$tier'. The registry team sets trust_tier: verified at merge — community PRs cannot self-declare these capabilities."
+                echo "::error file=$manifest::Verified-only capabilities declared (sidecar/ai:inference/write:external_output/propose:*/webview) but trust_tier='$tier'. The registry team sets trust_tier: verified at merge — community PRs cannot self-declare these capabilities."
                 fail=1
               else
                 echo "  trust_tier: $tier ✅"

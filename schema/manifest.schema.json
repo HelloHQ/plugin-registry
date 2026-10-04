@@ -96,17 +96,57 @@
               "read:external_input",
               "plugin:storage",
               "network:fetch",
-              "ai:inference"
+              "ai:inference",
+              "propose:holdings",
+              "propose:valuations"
             ]
           },
           "scope": { "type": "object" }
         },
-        "required": ["id"]
+        "required": ["id"],
+        "allOf": [
+          {
+            "$comment": "propose:holdings / propose:valuations let a plugin SUGGEST a holding or a value that the person must approve in the app; they are Verified-only and require scope {\"kinds\": [...]} naming the asset kinds the plugin may propose. A missing scope is never read as 'any kind'. The kind enum is closed and MUST equal PluginProposePermission.kinds in HelloHQ/hellohq (lib/app/data/model/plugin/plugin_propose_scope.dart); hellohq has a test that compares the vendored copy of this schema with that set. The Verified-only tier check is in .github/workflows/validate.yml.",
+            "if": {
+              "properties": { "id": { "enum": ["propose:holdings", "propose:valuations"] } },
+              "required": ["id"]
+            },
+            "then": {
+              "required": ["scope"],
+              "properties": {
+                "scope": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kinds"],
+                  "properties": {
+                    "kinds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "items": {
+                        "enum": [
+                          "stock_ticker",
+                          "crypto_ticker",
+                          "crypto_exchange",
+                          "home",
+                          "car",
+                          "precious_metal",
+                          "domain",
+                          "loan_mortgage"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "trust_tier": {
       "enum": ["community", "verified", "official"],
-      "description": "Assigned by the registry team at merge — do not set this yourself. Governs which capabilities the plugin may declare. community (default): Wasm-only, declarative/headless UI, no ai:inference, no write:external_output, no sidecar. verified: unlocks sidecar execution, ai:inference, write:external_output, and webview UI after manual Verified review. official: HelloHQ first-party plugins (hellohq.* id prefix)."
+      "description": "Assigned by the registry team at merge — do not set this yourself. Governs which capabilities the plugin may declare. community (default): Wasm-only, declarative/headless UI, no ai:inference, no write:external_output, no propose:*, no sidecar. verified: unlocks sidecar execution, ai:inference, write:external_output, propose:holdings, propose:valuations, and webview UI after manual Verified review. official: HelloHQ first-party plugins (hellohq.* id prefix)."
     },
     "provenance": {
       "enum": ["core", "community", "enterprise"],
