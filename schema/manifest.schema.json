@@ -201,7 +201,40 @@
         },
         "required": ["sig_alg", "key_id", "signature"]
       }
+    },
+    "author_cert": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16384,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "description": "Doc 25/27: base64 of the EXACT bytes of the registry-issued author certificate (scripts/author-cert.mjs) whose keys made this plugin's signatures[]. Added by the signing pipeline after merge — do not set this yourself. The app verifies the certificate's registry-root signature over these exact bytes, its validity window and its presence in the signed index manifest's valid_author_cert_ids, then verifies signatures[] with the certificate's keys."
+    },
+    "author_cert_sig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signatures"],
+      "description": "The registry root's hybrid signatures over the decoded author_cert bytes. Added by the signing pipeline; present exactly when author_cert is.",
+      "properties": {
+        "signatures": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sig_alg": { "enum": ["ed25519", "ml-dsa-65"] },
+              "key_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+              "signature": { "type": "string", "minLength": 1 }
+            },
+            "required": ["sig_alg", "key_id", "signature"]
+          }
+        }
+      }
     }
+  },
+  "dependentRequired": {
+    "author_cert": ["author_cert_sig"],
+    "author_cert_sig": ["author_cert"]
   },
   "allOf": [
     {

@@ -6,7 +6,7 @@
 //   - leave them exactly as they are on the base branch, when the statement
 //     (id, version, tier, mode, file hash, UI hash) is unchanged; or
 //   - drop them (the pipeline re-signs after merge).
-// It may never add or edit one, and must drop them when it changes anything
+// It may never add or edit one (nor author_cert / author_cert_sig), and must drop them when it changes anything
 // the statement covers: a kept signature would no longer verify, and the app
 // would refuse the plugin until the next re-sign.
 //
@@ -19,6 +19,19 @@ import { artifactStatement } from './artifact-statement.mjs';
 /** Why [head]'s signatures are not acceptable in a PR against [base]
  *  (null when there is no base manifest), or null when they are. */
 export function prSignatureProblem(base, head) {
+  // The author certificate pair is written only by the signing pipeline too.
+  // It does not depend on the artifact statement, so a PR may keep it or drop
+  // it (the pipeline re-stamps), but never add or edit it.
+  const certKeys = ['author_cert', 'author_cert_sig'];
+  const certTouched = certKeys.some((k) => head[k] !== undefined);
+  if (certTouched) {
+    if (base == null) {
+      return 'a new plugin must not carry author_cert; the signing pipeline adds it after merge';
+    }
+    if (certKeys.some((k) => !isDeepStrictEqual(base[k], head[k]))) {
+      return 'author_cert and author_cert_sig are written only by the signing pipeline; keep them as on the base branch or remove them';
+    }
+  }
   if (head.signatures === undefined) return null;
   if (base == null) {
     return 'a new plugin must not carry signatures; the signing pipeline adds them after merge';

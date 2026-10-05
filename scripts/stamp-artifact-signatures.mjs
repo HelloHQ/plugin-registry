@@ -47,18 +47,32 @@ export function stampSignatures(manifest, sigs) {
   };
 }
 
+/** [manifest] with the author certificate pair from a certs/<id>.json body. */
+export function stampAuthorCert(manifest, certBody) {
+  if (typeof certBody?.author_cert !== 'string' || !Array.isArray(certBody?.author_cert_sig?.signatures)) {
+    throw new Error('not a certs/<id>.json body (needs author_cert and author_cert_sig.signatures)');
+  }
+  return { ...manifest, author_cert: certBody.author_cert, author_cert_sig: certBody.author_cert_sig };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [path, ...args] = process.argv.slice(2);
   const sigs = [];
+  let certPath;
   for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cert' && args[i + 1]) {
+      certPath = args[++i];
+      continue;
+    }
     if (args[i] !== '--sig' || !args[i + 1]) {
-      console.error('usage: stamp-artifact-signatures.mjs <manifest> --sig <alg>:<key_id>:<file> ...');
+      console.error('usage: stamp-artifact-signatures.mjs <manifest> --sig <alg>:<key_id>:<file> ... [--cert certs/<id>.json]');
       process.exit(2);
     }
     const [sig_alg, key_id, file] = args[++i].split(':');
     sigs.push({ sig_alg, key_id, bytes: readFileSync(file) });
   }
-  const manifest = JSON.parse(readFileSync(path, 'utf8'));
-  writeFileSync(path, JSON.stringify(stampSignatures(manifest, sigs), null, 2) + '\n');
-  console.log(`stamped ${sigs.length} signature(s) into ${path}`);
+  let manifest = stampSignatures(JSON.parse(readFileSync(path, 'utf8')), sigs);
+  if (certPath) manifest = stampAuthorCert(manifest, JSON.parse(readFileSync(certPath, 'utf8')));
+  writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
+  console.log(`stamped ${sigs.length} signature(s)${certPath ? ' and the author certificate' : ''} into ${path}`);
 }
