@@ -76,7 +76,12 @@
     },
     "sidebar_icon": {
       "type": "string",
-      "description": "24x24 single-fill SVG (URL for wasm plugins, bundle path for webview). Invalid icons fall back to a generic glyph."
+      "description": "24x24 single-fill SVG: an https URL, or for a webview plugin a path inside the UI bundle. An https icon needs sidebar_icon_hash_sha256. Invalid icons fall back to a generic glyph."
+    },
+    "sidebar_icon_hash_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex SHA-256 of the SVG served at an https sidebar_icon. The app downloads the icon once at install, checks this hash and draws the local copy; it never loads an unpinned icon from the network. CI verifies it, caps the file at 64 KiB and rejects scripts, foreignObject, event handlers and external references."
     },
     "entry_function": { "type": "string", "default": "run" },
     "permissions": {

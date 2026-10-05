@@ -9,8 +9,10 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   MAX_ARTIFACT_BYTES,
+  MAX_ICON_BYTES,
   PLACEHOLDER_HASH,
   artifactProblems,
+  svgIconProblem,
   wasmToolsValidate,
 } from "../scripts/verify-artifacts.mjs";
 
@@ -121,4 +123,66 @@ test("validate.yml runs the artifact check and installs wasm-tools", () => {
   assert.match(wf, /bin\/wasm-tools" --version/);
   assert.match(wf, /sha256sum -c -/, "the wasm-tools download is hash-pinned");
   assert.doesNotMatch(wf, /apt-get install -y wabt|^\s*if ! wasm-validate/m, "wabt cannot validate components");
+});
+
+// ── sidebar_icon ────────────────────────────────────────────────────────────
+const ICON = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24">' +
+  '<defs><linearGradient id="g"><stop offset="0"/></linearGradient><path id="p" d="M0 0h24v24H0z"/></defs>' +
+  '<use href="#p" fill="url(#g)"/><use xlink:href="#p"/><path d="M4 4h16v16H4z" fill="currentColor"/></svg>',
+);
+const ICON_URL = "https://example.com/icon.svg";
+const withIcon = (over = {}) => manifest({ sidebar_icon: ICON_URL, sidebar_icon_hash_sha256: sha(ICON), ...over });
+const iconFetch = (icon = ICON) => fakeFetch({ ...files, [ICON_URL]: icon });
+
+test("a pinned, plain SVG icon passes", async () => {
+  assert.deepEqual(await check(withIcon(), { fetchImpl: iconFetch() }), []);
+});
+
+test("an https icon without a hash warns now and fails once required", async () => {
+  const warnings = [];
+  const m = manifest({ sidebar_icon: ICON_URL });
+  assert.deepEqual(await check(m, { fetchImpl: iconFetch(), warn: (w) => warnings.push(w) }), []);
+  assert.match(warnings[0], /no sidebar_icon_hash_sha256/);
+  const problems = await check(m, { fetchImpl: iconFetch(), requireIconHash: true });
+  assert.match(problems[0], /no sidebar_icon_hash_sha256/);
+});
+
+test("icon hash mismatch, placeholder, oversize and non-https fail", async () => {
+  assert.match((await check(withIcon({ sidebar_icon_hash_sha256: sha(UI) }), { fetchImpl: iconFetch() }))[0], /sidebar_icon SHA-256 mismatch/);
+  assert.match((await check(withIcon({ sidebar_icon_hash_sha256: PLACEHOLDER_HASH }), { fetchImpl: iconFetch() }))[0], /placeholder/);
+  const big = Buffer.concat([ICON, Buffer.alloc(MAX_ICON_BYTES)]);
+  assert.match((await check(withIcon({ sidebar_icon_hash_sha256: sha(big) }), { fetchImpl: iconFetch(big) }))[0], /larger than 65536/);
+  for (const url of ["http://example.com/icon.svg", "data:image/svg+xml,<svg/>", "file:///etc/icon.svg"]) {
+    assert.match((await check(withIcon({ sidebar_icon: url }), { fetchImpl: iconFetch() }))[0], /must be an https URL/, url);
+  }
+});
+
+test("a bundle-path icon needs no hash; a hash without an https icon is refused", async () => {
+  assert.deepEqual(await check(manifest({ sidebar_icon: "icons/plugin.svg" })), []);
+  assert.match((await check(manifest({ sidebar_icon: "icons/plugin.svg", sidebar_icon_hash_sha256: sha(ICON) })))[0], /applies only to an https sidebar_icon/);
+  assert.match((await check(manifest({ sidebar_icon_hash_sha256: sha(ICON) })))[0], /sidebar_icon is not/);
+});
+
+test("unsafe or non-SVG icons are refused", async () => {
+  const bad = {
+    "<svg><script>alert(1)</script></svg>": /<script>/,
+    "<svg><foreignObject><div/></foreignObject></svg>": /foreignObject/,
+    '<svg onload="x()"></svg>': /event-handler/,
+    '<svg><a href="https://evil.example/">x</a></svg>': /outside the file \(href\)/,
+    '<svg><use xlink:href="https://evil.example/s.svg#a"/></svg>': /outside the file \(href\)/,
+    '<svg><path fill="url(https://evil.example/p)"/></svg>': /outside the file \(url\(\)\)/,
+    '<svg><style>@import "https://evil.example/x.css";</style></svg>': /@import|element that can load/,
+    "<svg><image width=\"1\"/></svg>": /element that can load/,
+    '<!DOCTYPE svg [<!ENTITY x "y">]><svg/>': /entity|DOCTYPE/,
+    '<svg><a href="javascript:alert(1)"/></svg>': /javascript:|href/,
+    "<html><body/></html>": /no <svg> element/,
+  };
+  for (const [text, re] of Object.entries(bad)) {
+    assert.match(svgIconProblem(Buffer.from(text)) ?? "ok", re, text);
+    const b = Buffer.from(text);
+    const problems = await check(withIcon({ sidebar_icon_hash_sha256: sha(b) }), { fetchImpl: iconFetch(b) });
+    assert.equal(problems.length, 1, text);
+  }
+  assert.match(svgIconProblem(Buffer.from([0xff, 0xfe, 0x00])), /not UTF-8/);
 });
