@@ -4,7 +4,7 @@
     {
       "id": "com.hellohq.hello-world",
       "name": "Hello World",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "A minimal reference plugin that lists your portfolio names.",
       "author": "HelloHQ",
       "categories": [
@@ -13,7 +13,7 @@
       "trust_tier": "official",
       "provenance": "core",
       "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.hellohq.hello-world/manifest.json",
-      "manifest_hash_sha256": "64297aab35e72001ec9c572941a5cc470ffa8b3c1737da0a7a60cf497f8940d5",
+      "manifest_hash_sha256": "b3df972ff47c71ebcd08aded48e9009280c57c679a9dc286a423d1a0badd7b11",
       "permissions": [
         "read:portfolio_names"
       ],
