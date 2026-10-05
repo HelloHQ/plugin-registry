@@ -166,6 +166,19 @@ jobs:
               fi
             fi
 
+            # ── 3b. Publisher signatures are never written by a PR (SA5) ─────
+            # Only the signing pipeline adds signatures[], after merge. A PR
+            # keeps them unchanged or drops them, and must drop them when it
+            # changes anything the artifact statement covers.
+            if [ "$EVENT_NAME" = "pull_request" ]; then
+              base_arg=""
+              [ -s /tmp/base-manifest.json ] && base_arg=/tmp/base-manifest.json
+              if ! sig_problem=$(node scripts/check-pr-signatures.mjs "$base_arg" "$manifest"); then
+                echo "::error file=$manifest::$sig_problem"
+                fail=1
+              fi
+            fi
+
             # ── 4. network:fetch requires a non-empty scope.origins ─────────
             # The app reads the allowlist from the network:fetch permission's
             # own scope (scope.origins), never from a top-level block.

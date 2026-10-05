@@ -1,0 +1,36 @@
+{
+  "$comment": "Artifact statement test vectors (format v1, scripts/artifact-statement.mjs). HelloHQ/hellohq checks the same vectors against its own builder when this checkout sits beside it. Add vectors; never edit one.",
+  "vectors": [
+    {
+      "name": "official wasm, no UI bundle",
+      "manifest": {
+        "id": "com.hellohq.hello-world",
+        "version": "1.0.0",
+        "trust_tier": "official",
+        "content_hash_sha256": "abababababababababababababababababababababababababababababababab"
+      },
+      "statement": "hellohq-plugin-artifact/v1\nid=com.hellohq.hello-world\nversion=1.0.0\ntrust_tier=official\nexecution_mode=wasm\ncontent_hash_sha256=abababababababababababababababababababababababababababababababab\nui_bundle_hash_sha256=\n"
+    },
+    {
+      "name": "defaults: no tier, no mode",
+      "manifest": {
+        "id": "com.example.demo",
+        "version": "2.1.0-beta.1",
+        "content_hash_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "statement": "hellohq-plugin-artifact/v1\nid=com.example.demo\nversion=2.1.0-beta.1\ntrust_tier=community\nexecution_mode=wasm\ncontent_hash_sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nui_bundle_hash_sha256=\n"
+    },
+    {
+      "name": "verified sidecar with UI bundle",
+      "manifest": {
+        "id": "com.example.lens",
+        "version": "0.3.0",
+        "trust_tier": "verified",
+        "execution_mode": "sidecar",
+        "content_hash_sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "ui_bundle_hash_sha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+      },
+      "statement": "hellohq-plugin-artifact/v1\nid=com.example.lens\nversion=0.3.0\ntrust_tier=verified\nexecution_mode=sidecar\ncontent_hash_sha256=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\nui_bundle_hash_sha256=efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\n"
+    }
+  ]
+}
