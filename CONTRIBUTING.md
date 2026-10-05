@@ -11,7 +11,9 @@
       a GitHub Release asset, not a CDN link that can expire.
 - [ ] `content_hash_sha256` matches `shasum -a 256` of the published binary.
 - [ ] `permissions` lists only what the plugin needs. `read:aggregated_values`
-      includes a `scope.portfolios`.
+      includes a `scope.portfolios`. `propose:holdings` / `propose:valuations`
+      (Verified only) include a `scope.kinds` listing the asset kinds the
+      plugin may suggest.
 - [ ] `repo` and `author_url` are reachable.
 - [ ] `publisher_signing_key_id` is **omitted** on first submission — the
       registry team adds it at merge.

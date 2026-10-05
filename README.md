@@ -35,8 +35,8 @@ matches `id`. See [CONTRIBUTING.md](CONTRIBUTING.md) and
 
 | Tier | How | Unlocks |
 |---|---|---|
-| Community | CI passes | All permissions except `read:aggregated_values`, `write:external_output`; declarative + headless UI |
-| Verified | Manual security review | aggregated values, file output, WebView UI, Tier 1 Python |
+| Community | CI passes | All permissions except `read:aggregated_values`, `write:external_output`, `propose:*`; declarative + headless UI |
+| Verified | Manual security review | aggregated values, file output, proposing holdings/values, WebView UI, Tier 1 Python |
 | Official | Built by HelloHQ | — |
 
 The protocol contract lives in

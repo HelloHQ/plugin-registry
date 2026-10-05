@@ -5,7 +5,7 @@
 A PR is eligible for fast-merge when **all** of these hold:
 
 - CI is green.
-- No `read:aggregated_values` and no `write:external_output`.
+- No `read:aggregated_values`, no `write:external_output` and no `propose:*`.
 - `ui_type` is not `webview`.
 - `execution_mode` is not `sidecar`.
 
@@ -14,7 +14,8 @@ Fast-merge target: under 1 business day.
 ## Security review (Verified tier)
 
 Required when the plugin requests any of: `read:aggregated_values`,
-`write:external_output`, `network:fetch`, `ai:inference`, a `webview` UI, or a
+`write:external_output`, `propose:holdings`, `propose:valuations`, `network:fetch`,
+`ai:inference`, a `webview` UI, or a
 Python `sidecar`. Target: 2–5 business days.
 
 The reviewer checklist:
@@ -46,6 +47,14 @@ The reviewer checklist:
    portfolio-derived data there. The app surfaces this pairing to the user at
    consent (a distinct warning naming the origins), but this registry review is
    the gate that keeps a malicious pairing out.
+9. **For `propose:holdings` / `propose:valuations`** — the plugin can only
+   *suggest*: the person approves every proposal in the app, and nothing is
+   written before that. Check that `scope.kinds` lists only the asset kinds the
+   plugin needs, that every source key it proposes against is something it
+   really fetched (a wallet address, an exchange asset code), and that
+   `display_name` / `source.reference` text carries no links or instructions.
+   A plugin that proposes in bulk must justify the volume (the host caps a call
+   at 200 proposals).
 
 ## Removal
 

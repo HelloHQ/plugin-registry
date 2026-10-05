@@ -1,0 +1,25 @@
+{
+  "id": "com.example.wallet",
+  "name": "Wallet",
+  "version": "1.0.0",
+  "description": "d",
+  "author": "a",
+  "author_url": "https://example.com",
+  "repo": "https://example.com/r",
+  "license": "MIT",
+  "min_host_version": "2.0.0",
+  "wasm_url": "https://example.com/p.wasm",
+  "content_hash_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "trust_tier": "verified",
+  "permissions": [
+    {
+      "id": "propose:transactions",
+      "scope": {
+        "kinds": [
+          "home"
+        ]
+      }
+    }
+  ],
+  "ui_type": "declarative"
+}
