@@ -168,6 +168,11 @@ jobs:
                 echo "  version: new plugin — no base-branch version to compare"
               elif git diff --quiet "origin/${BASE_REF}...HEAD" -- "$manifest"; then
                 echo "  version: $(node -p "require('./$manifest').version") — unchanged by this PR"
+              elif [ "$(node -p "require('/tmp/base-manifest.json').content_hash_sha256")" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
+                # The base version only ever had the placeholder hash, so no
+                # one could install it: pinning its real hash keeps the version.
+                # (Placeholders can no longer merge; see step 7.)
+                echo "  version: $(node -p "require('./$manifest').version") — replaces a placeholder hash; no increase needed"
               else
                 base_ver=$(node -p "require('/tmp/base-manifest.json').version")
                 cur_ver=$(node -p "require('./$manifest').version")

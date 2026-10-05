@@ -11,7 +11,7 @@
   "min_host_version": "1.0.0",
   "execution_mode": "wasm",
   "wasm_url": "https://github.com/HelloHQ/plugin-sdk/releases/download/hello-world-v1.0.0/plugin.wasm",
-  "content_hash_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "content_hash_sha256": "6f2e89607eb6642de832b5ad653408ee00840ad89b26d8cce57aab6af4c22706",
   "ui_type": "declarative",
   "sidebar_icon": "https://github.com/HelloHQ/plugin-sdk/releases/download/hello-world-v1.0.0/icon.svg",
   "entry_function": "run",
