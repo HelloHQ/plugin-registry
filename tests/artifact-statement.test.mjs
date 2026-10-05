@@ -14,7 +14,7 @@ import {
   artifactStatement,
 } from "../scripts/artifact-statement.mjs";
 import { prSignatureProblem } from "../scripts/check-pr-signatures.mjs";
-import { stampSignatures } from "../scripts/stamp-artifact-signatures.mjs";
+import { stampAuthorCert, stampSignatures } from "../scripts/stamp-artifact-signatures.mjs";
 
 const require = createRequire(import.meta.url);
 const Ajv2020 = require("ajv/dist/2020");
@@ -237,4 +237,50 @@ test("PR: the CLI exits non-zero with the reason", () => {
 test("validate.yml runs the PR signature rule", () => {
   const wf = readFileSync(new URL("../.github/workflows/validate.yml", import.meta.url), "utf8");
   assert.match(wf, /node scripts\/check-pr-signatures\.mjs "\$base_arg" "\$manifest"/);
+});
+
+// ── author certificate pair on a manifest ──────────────────────────────────
+
+const certBody = () => ({
+  author_cert: Buffer.from('{"cert_id":"author-acme-2026-10-05"}').toString("base64"),
+  author_cert_sig: {
+    signatures: [
+      { sig_alg: "ed25519", key_id: "k1", signature: "AAAA" },
+      { sig_alg: "ml-dsa-65", key_id: "k2", signature: "BBBB" },
+    ],
+  },
+});
+
+test("the stamp script writes the certificate pair and nothing else new", () => {
+  const stamped = stampAuthorCert(stampSignatures(base(), sigs()), certBody());
+  assert.deepEqual(stamped.author_cert, certBody().author_cert);
+  assert.deepEqual(stamped.author_cert_sig, certBody().author_cert_sig);
+  assert.deepEqual(stamped.signatures, stampSignatures(base(), sigs()).signatures);
+  assert.throws(() => stampAuthorCert(base(), { author_cert: "x" }), /certs/);
+});
+
+test("a manifest may carry the certificate pair, but not half of it or junk", () => {
+  const m = { ...stampAuthorCert(stampSignatures(base(), sigs()), certBody()) };
+  const errors = () => (validate(m) ? [] : validate.errors.map((e) => `${e.instancePath} ${e.message}`));
+  assert.deepEqual(errors().filter((e) => /author_cert/.test(e)), []);
+  const half = { ...m };
+  delete half.author_cert_sig;
+  assert.ok(!validate(half) && validate.errors.some((e) => /author_cert_sig/.test(e.message)), "needs both");
+  assert.ok(!validate({ ...m, author_cert: "not base64!" }), "base64 only");
+  assert.ok(!validate({ ...m, author_cert_sig: { signatures: [] } }), "needs a signature");
+});
+
+test("a PR never adds or edits the certificate pair", () => {
+  const withCert = stampAuthorCert(stampSignatures(base(), sigs()), certBody());
+  assert.match(prSignatureProblem(null, withCert), /new plugin/);
+  assert.match(prSignatureProblem(base(), withCert), /signing pipeline/);
+  assert.match(
+    prSignatureProblem(withCert, { ...withCert, author_cert: Buffer.from("other").toString("base64") }),
+    /signing pipeline/,
+  );
+  assert.equal(prSignatureProblem(withCert, structuredClone(withCert)), null, "kept as on base");
+  const dropped = { ...withCert };
+  delete dropped.author_cert;
+  delete dropped.author_cert_sig;
+  assert.equal(prSignatureProblem(withCert, dropped), null, "may be dropped");
 });
