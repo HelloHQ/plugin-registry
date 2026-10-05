@@ -113,3 +113,15 @@ test("validate.yml still wires the helper into the tier check", () => {
   assert.ok(yml.includes("scripts/verified-only-permissions.mjs"));
   assert.ok(yml.includes("node --test tests/*.test.mjs"));
 });
+
+test("a permission may carry a short reason, and only a short string", () => {
+  const base = fixture("valid-propose");
+  const withReason = (reason) => ({
+    ...base,
+    permissions: [{ ...base.permissions[0], reason }],
+  });
+  assert.ok(ok(withReason("Name each portfolio in the report.")));
+  assert.ok(!ok(withReason("")), "empty reason");
+  assert.ok(!ok(withReason("x".repeat(241))), "reason over 240 characters");
+  assert.ok(!ok(withReason(42)), "reason must be a string");
+});

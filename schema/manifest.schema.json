@@ -101,7 +101,13 @@
               "propose:valuations"
             ]
           },
-          "scope": { "type": "object" }
+          "scope": { "type": "object" },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "description": "One plain sentence shown to the person in the install dialog: why this plugin needs the permission. Optional; the host never uses it to decide anything."
+          }
         },
         "required": ["id"],
         "allOf": [
