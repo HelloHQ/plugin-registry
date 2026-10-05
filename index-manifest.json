@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "index_sha256": "113a51576cb7d9a4ae844390f57adb04c58fefe773e5d0601a25a220b9bc31c6",
-  "sequence": 4,
-  "issued_at": "2026-10-05T11:48:20Z",
-  "expires_at": "2026-11-09T11:48:20Z"
+  "index_sha256": "9b5d649e36721aebfbfb6d11157f4b85724951f6b0a4742f23ddadcae48cc092",
+  "sequence": 6,
+  "issued_at": "2026-10-05T13:58:19Z",
+  "expires_at": "2026-11-09T13:58:19Z"
 }
