@@ -74,12 +74,26 @@ jobs:
 
       # ajv@8 local install for the schema self-check script (draft-2020-12).
       # ajv-cli global install for the `ajv validate` command in the main loop.
-      # wabt provides `wasm-validate` for Wasm binary format checking.
+      # wasm-tools validates plugin binaries (scripts/verify-artifacts.mjs). It
+      # understands components; wabt's wasm-validate does not. Pinned by version
+      # and tarball SHA-256.
       - name: Install validators
+        env:
+          WASM_TOOLS_VERSION: "1.252.0"
+          WASM_TOOLS_SHA256: 097b1181d5b2bc3f2ebc44b4e72edf18308902023f1f1483a1a7dc1268ea988d
         run: |
+          set -euo pipefail
           npm install ajv@8 ajv-formats
           npm install -g ajv-cli ajv-formats
-          sudo apt-get install -y wabt
+          tgz="wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz"
+          curl -fsSL -o "/tmp/$tgz" \
+            "https://github.com/bytecodealliance/wasm-tools/releases/download/v${WASM_TOOLS_VERSION}/$tgz"
+          echo "${WASM_TOOLS_SHA256}  /tmp/$tgz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "/tmp/$tgz" --strip-components=1 -C "$HOME/.local/bin" \
+            "wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux/wasm-tools"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/wasm-tools" --version
 
       # ── Schema self-validation ──────────────────────────────────────────────
       # AJV's validateSchema() catches broken $ref, unknown keywords, malformed
@@ -334,58 +348,13 @@ jobs:
               echo "  provenance: $prov, licensing: $lkind ✅"
             fi
 
-            # ── 7. SHA-256 hash + Wasm binary validity ──────────────────────
-            wasm_url=$(node -p "require('./$manifest').wasm_url")
-            want_hash=$(node -p "require('./$manifest').content_hash_sha256")
-            placeholder="0000000000000000000000000000000000000000000000000000000000000000"
-
-            if [ "$want_hash" = "$placeholder" ]; then
-              # SA9 (doc 59): a placeholder hash bypasses download + hash +
-              # wasm-validate, so the artifact is UNVERIFIED. Legitimate only for
-              # a first-submission bootstrap; emit a loud annotation (not a
-              # silent skip) so a reviewer must consciously accept it before
-              # merge rather than it passing unnoticed.
-              echo "::warning file=$manifest::placeholder content_hash_sha256 — wasm download/hash/validate SKIPPED; this artifact is UNVERIFIED. Acceptable only for a new-plugin bootstrap; a real hash must land before the plugin is usable."
-            else
-              if ! curl -fsSL --max-time 60 "$wasm_url" -o /tmp/plugin.wasm; then
-                echo "::error file=$manifest::failed to download wasm_url: $wasm_url"
-                fail=1
-              else
-                # Hash
-                got_hash=$(sha256sum /tmp/plugin.wasm | cut -d' ' -f1)
-                if [ "$got_hash" != "$want_hash" ]; then
-                  echo "::error file=$manifest::SHA-256 mismatch: want $want_hash got $got_hash"
-                  fail=1
-                else
-                  echo "  SHA-256: $want_hash ✅"
-                fi
-
-                # Wasm binary validity (wabt wasm-validate)
-                if ! wasm-validate /tmp/plugin.wasm 2>&1; then
-                  echo "::error file=$manifest::wasm-validate failed — binary is not valid WebAssembly"
-                  fail=1
-                else
-                  echo "  wasm-validate ✅"
-                fi
-              fi
-            fi
-
-            # ── 8. URL reachability ─────────────────────────────────────────
-            # wasm_url reachability is already proven by the download above.
-            # Check ui_bundle_url for webview plugins via a HEAD request.
-            # Failures are warnings, not errors: some CDNs reject HEAD even
-            # when GET works fine.
-            if [ "$ui_type" = "webview" ]; then
-              ui_bundle_url=$(node -p "require('./$manifest').ui_bundle_url||''")
-              ui_hash=$(node -p \
-                "require('./$manifest').ui_bundle_hash_sha256||'$placeholder'")
-              if [ -n "$ui_bundle_url" ] && [ "$ui_hash" != "$placeholder" ]; then
-                if ! curl -fsSI --max-time 15 "$ui_bundle_url" -o /dev/null 2>&1; then
-                  echo "::warning file=$manifest::ui_bundle_url HEAD request failed — URL may be unreachable: $ui_bundle_url"
-                else
-                  echo "  ui_bundle_url reachable ✅"
-                fi
-              fi
+            # ── 7. Artifacts match their pins ───────────────────────────────
+            # scripts/verify-artifacts.mjs: content_hash_sha256 (and any UI
+            # bundle hash) must be real, never the all-zero placeholder; the
+            # URLs must serve exactly the pinned bytes; a Wasm plugin's file
+            # must be a valid core module or component (wasm-tools validate).
+            if ! node scripts/verify-artifacts.mjs "$manifest"; then
+              fail=1
             fi
 
             echo "::endgroup::"
