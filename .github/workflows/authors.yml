@@ -1,0 +1,66 @@
+name: authors
+
+on:
+  pull_request:
+    paths:
+      - "authors/**"
+      - "certs/**"
+      - "scripts/author-cert.mjs"
+      - "scripts/check-authors.mjs"
+      - "scripts/stamp-author-cert.mjs"
+      - "tests/author-cert.test.mjs"
+      - ".github/workflows/authors.yml"
+  push:
+    branches: [main]
+    paths:
+      - "authors/**"
+      - "certs/**"
+      - "scripts/author-cert.mjs"
+      - "scripts/check-authors.mjs"
+      - "tests/author-cert.test.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  authors:
+    name: Author enrollments and certificates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      # Certificates are written only by the signing pipeline, after merge. A
+      # PR that adds or edits one could otherwise pass off a forged
+      # certificate; it would still fail the app's chain check, but the
+      # registry should not carry it.
+      - name: A pull request does not write certs/
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep '^certs/' || true)
+          if [ -n "$changed" ]; then
+            echo "::error::certs/ is written only by the signing pipeline. Remove: $changed"
+            exit 1
+          fi
+
+      - name: At most one author enrollment per pull request
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          count=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -c '^authors/.*\.json$' || true)
+          if [ "$count" -gt 1 ]; then
+            echo "::error::PR touches $count author files. Open one PR per author."
+            exit 1
+          fi
+
+      - name: Enrollments are sound (shape, key lengths, proof of possession)
+        run: node scripts/check-authors.mjs
+
+      - name: Author certificate tests
+        run: node --test tests/author-cert.test.mjs
