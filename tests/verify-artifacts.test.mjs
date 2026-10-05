@@ -11,6 +11,7 @@ import {
   MAX_ARTIFACT_BYTES,
   MAX_ICON_BYTES,
   PLACEHOLDER_HASH,
+  REQUIRE_ICON_HASH,
   artifactProblems,
   svgIconProblem,
   wasmToolsValidate,
@@ -139,13 +140,15 @@ test("a pinned, plain SVG icon passes", async () => {
   assert.deepEqual(await check(withIcon(), { fetchImpl: iconFetch() }), []);
 });
 
-test("an https icon without a hash warns now and fails once required", async () => {
-  const warnings = [];
+test("an https icon without a hash is an error", async () => {
+  assert.equal(REQUIRE_ICON_HASH, true);
   const m = manifest({ sidebar_icon: ICON_URL });
-  assert.deepEqual(await check(m, { fetchImpl: iconFetch(), warn: (w) => warnings.push(w) }), []);
-  assert.match(warnings[0], /no sidebar_icon_hash_sha256/);
-  const problems = await check(m, { fetchImpl: iconFetch(), requireIconHash: true });
+  const problems = await check(m, { fetchImpl: iconFetch() });
   assert.match(problems[0], /no sidebar_icon_hash_sha256/);
+  // The warn-only mode still works if it is ever needed for a migration.
+  const warnings = [];
+  assert.deepEqual(await check(m, { fetchImpl: iconFetch(), requireIconHash: false, warn: (w) => warnings.push(w) }), []);
+  assert.match(warnings[0], /no sidebar_icon_hash_sha256/);
 });
 
 test("icon hash mismatch, placeholder, oversize and non-https fail", async () => {

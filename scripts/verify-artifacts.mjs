@@ -32,9 +32,9 @@ export const PLACEHOLDER_HASH = '0'.repeat(64);
 export const MAX_ARTIFACT_BYTES = 64 * 1024 * 1024;
 export const MAX_ICON_BYTES = 64 * 1024;
 
-// While existing manifests gain sidebar_icon_hash_sha256, an unpinned https
-// icon is a warning; flipped to an error once every listed plugin pins it.
-export const REQUIRE_ICON_HASH = false;
+// An unpinned https icon is an error: the app never draws one, so a listed
+// plugin must pin it. (It was a warning while existing manifests caught up.)
+export const REQUIRE_ICON_HASH = true;
 
 /** Why [svg] is not a plain, self-contained SVG icon, or null. Text checks,
  *  deliberately strict: an icon needs none of these. */
