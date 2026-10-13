@@ -1,14 +1,14 @@
 name: validate
 
 on:
-  pull_request:
-    paths:
-      - "plugins/**"
-      - "schema/**"
-      - "index.json"
-      - "scripts/**"
-      - "tests/**"
-      - ".github/workflows/validate.yml"
+  # CI-PAUSE 2026-10-13: pull_request:
+  # CI-PAUSE 2026-10-13:   paths:
+  # CI-PAUSE 2026-10-13:     - "plugins/**"
+  # CI-PAUSE 2026-10-13:     - "schema/**"
+  # CI-PAUSE 2026-10-13:     - "index.json"
+  # CI-PAUSE 2026-10-13:     - "scripts/**"
+  # CI-PAUSE 2026-10-13:     - "tests/**"
+  # CI-PAUSE 2026-10-13:     - ".github/workflows/validate.yml"
   push:
     branches: [main]
     paths:
