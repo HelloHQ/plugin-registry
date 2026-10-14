@@ -1,24 +1,23 @@
 name: authors
 
 on:
-  workflow_dispatch:  # CI-PAUSE 2026-10-13: no trigger left
-  # CI-PAUSE 2026-10-13: pull_request:
-  # CI-PAUSE 2026-10-13:   paths:
-  # CI-PAUSE 2026-10-13:     - "authors/**"
-  # CI-PAUSE 2026-10-13:     - "certs/**"
-  # CI-PAUSE 2026-10-13:     - "scripts/author-cert.mjs"
-  # CI-PAUSE 2026-10-13:     - "scripts/check-authors.mjs"
-  # CI-PAUSE 2026-10-13:     - "scripts/stamp-author-cert.mjs"
-  # CI-PAUSE 2026-10-13:     - "tests/author-cert.test.mjs"
-  # CI-PAUSE 2026-10-13:     - ".github/workflows/authors.yml"
-  # CI-PAUSE 2026-10-13: push:
-  # CI-PAUSE 2026-10-13:   branches: [main]
-  # CI-PAUSE 2026-10-13:   paths:
-  # CI-PAUSE 2026-10-13:     - "authors/**"
-  # CI-PAUSE 2026-10-13:     - "certs/**"
-  # CI-PAUSE 2026-10-13:     - "scripts/author-cert.mjs"
-  # CI-PAUSE 2026-10-13:     - "scripts/check-authors.mjs"
-  # CI-PAUSE 2026-10-13:     - "tests/author-cert.test.mjs"
+  pull_request:
+    paths:
+      - "authors/**"
+      - "certs/**"
+      - "scripts/author-cert.mjs"
+      - "scripts/check-authors.mjs"
+      - "scripts/stamp-author-cert.mjs"
+      - "tests/author-cert.test.mjs"
+      - ".github/workflows/authors.yml"
+  push:
+    branches: [main]
+    paths:
+      - "authors/**"
+      - "certs/**"
+      - "scripts/author-cert.mjs"
+      - "scripts/check-authors.mjs"
+      - "tests/author-cert.test.mjs"
 
 permissions:
   contents: read
