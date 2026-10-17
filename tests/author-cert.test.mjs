@@ -201,3 +201,31 @@ test('check-authors reports problems per file and passes a sound registry', asyn
   const bad = registry([{ ...author, tier: 'official' }]);
   assert.match(authorProblems(bad).join('\n'), /^authors\/acme-labs\.json: tier/);
 });
+
+test('two enrollments cannot share a key or claim overlapping prefixes', async () => {
+  const { authorProblems } = await import('../scripts/check-authors.mjs');
+  const a = enroll('acme-labs').author;
+  const problems = (...authors) => authorProblems(registry(authors)).join('\n');
+
+  // Distinct keys and disjoint namespaces are fine.
+  assert.equal(problems(a, enroll('widgets', { id_prefixes: ['com.widgets.'] }).author), '');
+  assert.equal(problems(a, enroll('acme-eu', { id_prefixes: ['com.acme-eu.'] }).author), '');
+
+  // The same prefix, a parent of it and a child of it all overlap.
+  for (const prefix of ['com.acme.', 'com.', 'com.acme.tools.']) {
+    const other = enroll('other', { id_prefixes: [prefix] }).author;
+    assert.match(problems(a, other), /authors\/other\.json: id prefix .* overlaps .* authors\/acme-labs\.json/, prefix);
+  }
+
+  // Re-enrolling the same keys under another slug is refused for each algorithm.
+  const reuseEd = enroll('copy', { id_prefixes: ['com.copy.'], public_keys: a.public_keys }).author;
+  assert.match(problems(a, reuseEd), /ed25519 key is already enrolled by authors\/acme-labs\.json/);
+  assert.match(problems(a, reuseEd), /ml-dsa-65 key is already enrolled/);
+  const reuseMl = enroll('copy2', { id_prefixes: ['com.copy2.'] }).author;
+  reuseMl.public_keys['ml-dsa-65'] = a.public_keys['ml-dsa-65'];
+  assert.match(problems(a, reuseMl), /ml-dsa-65 key is already enrolled/);
+
+  // A revoked enrollment still holds its namespace until the file is deleted.
+  const revoked = { ...a, revoked: true };
+  assert.match(problems(revoked, enroll('squatter', { id_prefixes: ['com.acme.'] }).author), /overlaps/);
+});
