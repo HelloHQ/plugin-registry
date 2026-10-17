@@ -31,6 +31,42 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // SPKI prefix of a raw 32-byte Ed25519 public key.
 const ED25519_SPKI = Buffer.from('302a300506032b6570032100', 'hex');
 export const KEY_BYTES = { ed25519: 32, 'ml-dsa-65': 1952 };
+/** HelloHQ's own namespace. An author prefix must not be this or sit under it. */
+export const RESERVED_PREFIX = 'com.hellohq.';
+const PREFIX = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*\.$/;
+
+/**
+ * Problems with [prefixes], or [] when it is 1–8 unique, sorted, dotted
+ * prefixes (each ending in "." and carrying at least two labels).
+ */
+export function prefixProblems(prefixes) {
+  if (!Array.isArray(prefixes) || prefixes.length < 1 || prefixes.length > 8) {
+    return ['id_prefixes must be 1 to 8 prefixes'];
+  }
+  const out = [];
+  for (const p of prefixes) {
+    if (typeof p !== 'string' || !PREFIX.test(p)) {
+      out.push('id_prefixes entries must be dotted prefixes ending in "."');
+      continue;
+    }
+    if (p.split('.').filter((label) => label.length > 0).length < 2) {
+      out.push(`id_prefixes entry "${p}" must have at least two labels`);
+    }
+    if (p === RESERVED_PREFIX || p.startsWith(RESERVED_PREFIX)) {
+      out.push(`id_prefixes entry "${p}" is reserved for HelloHQ`);
+    }
+  }
+  const sorted = [...prefixes].map(String).sort();
+  if (new Set(prefixes).size !== prefixes.length || prefixes.some((p, i) => p !== sorted[i])) {
+    out.push('id_prefixes must be unique and sorted');
+  }
+  return out;
+}
+
+/** Whether [prefix] is a namespace of [pluginId] (the id continues past the dot). */
+export function prefixCovers(prefix, pluginId) {
+  return typeof pluginId === 'string' && pluginId.startsWith(prefix) && pluginId.length > prefix.length;
+}
 
 const b64 = (s) => Buffer.from(String(s), 'base64');
 const isB64 = (s, n) =>
@@ -54,6 +90,7 @@ export function enrollmentStatement(author) {
       line('oidc_subject', author.identity?.oidc_subject) +
       line('ed25519', author.public_keys?.ed25519) +
       line('ml-dsa-65', author.public_keys?.['ml-dsa-65']) +
+      line('id_prefixes', [].concat(author.id_prefixes ?? []).join(',')) +
       line('tier', author.tier),
     'utf8',
   );
@@ -76,6 +113,7 @@ export function enrollmentProblems(author, { slugFromFile } = {}) {
     if (typeof id?.[f] !== 'string' || id[f].length === 0 || /[\r\n]/.test(id[f])) out.push(`identity.${f} is required`);
   }
   if (typeof id?.oidc_issuer === 'string' && !/^https:\/\//.test(id.oidc_issuer)) out.push('identity.oidc_issuer must be an https URL');
+  out.push(...prefixProblems(author.id_prefixes));
   if (author.tier !== 'author') out.push('tier must be "author"');
   const keys = author.public_keys ?? {};
   for (const [alg, n] of Object.entries(KEY_BYTES)) {
@@ -125,6 +163,7 @@ export function buildCert(author, { now, days = DEFAULT_LIFETIME_DAYS }) {
         ed25519: author.public_keys.ed25519,
         'ml-dsa-65': author.public_keys['ml-dsa-65'],
       },
+      id_prefixes: author.id_prefixes,
       not_before: notBefore,
       not_after: iso(start + days * DAY_MS),
       tier: 'author',
@@ -162,13 +201,17 @@ export function loadCerts(registryDir) {
 const sameKeys = (a, b) =>
   Object.keys(KEY_BYTES).every((alg) => a?.[alg] != null && a[alg] === b?.[alg]);
 
+const samePrefixes = (a, b) =>
+  Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((p, i) => p === b[i]);
+
 /** Whether [cert] still binds exactly what an un-revoked enrollment says. */
 export function certMatchesAuthor(cert, author) {
   return (
     author.revoked !== true &&
     cert.identity?.oidc_issuer === author.identity.oidc_issuer &&
     cert.identity?.oidc_subject === author.identity.oidc_subject &&
-    sameKeys(cert.public_keys, author.public_keys)
+    sameKeys(cert.public_keys, author.public_keys) &&
+    samePrefixes(cert.id_prefixes, author.id_prefixes)
   );
 }
 
