@@ -1,0 +1,43 @@
+name: signed-index-watchdog
+
+# Daily dead-man check on the signed index (scripts/check-signed-index.mjs).
+# plugin-signing's sign-release alerts when one of its runs fails, but a run
+# that never starts alerts nobody. This checks the outcome from here, on a
+# GitHub-hosted runner (free for this public repo), so it does not depend on
+# the signer's runner: the index manifest must pin index.json (12 h grace),
+# be more than 5 days from expiry, and be signed by the registry root.
+# Opens one assigned "Signed index needs attention" issue, comments on it
+# while it fails, and closes it when the check passes again.
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the grace window reads when index.json last changed
+
+      - name: Check the signed index and update the watchdog issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const m = await import(`${process.env.GITHUB_WORKSPACE}/scripts/check-signed-index.mjs`);
+            const problems = m.checkCheckout(process.env.GITHUB_WORKSPACE);
+            for (const p of problems) core.error(p);
+            const did = await m.reconcileWatchdogIssue(m.makeGitHub(github, context.repo), {
+              problems,
+              runUrl: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              assignees: ['calvinchengx'],
+            });
+            core.info(`watchdog issue: ${did}`);
+            if (problems.length) core.setFailed(`${problems.length} problem(s) with the signed index`);
+            else core.info('signed index is good');
