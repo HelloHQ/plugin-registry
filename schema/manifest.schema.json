@@ -242,13 +242,23 @@
       "then": { "required": ["ui_bundle_url", "ui_bundle_hash_sha256"] }
     },
     {
-      "$comment": "read:aggregated_values requires an explicit portfolio scope.",
+      "$comment": "read:aggregated_values requires an explicit portfolio scope, except in a first-party plugin (trust_tier official with provenance core, both set by the registry team): it needs every portfolio and cannot know a person's portfolio ids in advance. A grant without a scope covers all portfolios; the install dialog still shows it.",
       "if": {
-        "properties": {
-          "permissions": {
-            "contains": { "properties": { "id": { "const": "read:aggregated_values" } }, "required": ["id"] }
+        "allOf": [
+          {
+            "properties": {
+              "permissions": {
+                "contains": { "properties": { "id": { "const": "read:aggregated_values" } }, "required": ["id"] }
+              }
+            }
+          },
+          {
+            "not": {
+              "properties": { "trust_tier": { "const": "official" }, "provenance": { "const": "core" } },
+              "required": ["trust_tier", "provenance"]
+            }
           }
-        }
+        ]
       },
       "then": {
         "properties": {
