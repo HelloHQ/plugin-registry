@@ -78,7 +78,7 @@
       "trust_tier": "official",
       "provenance": "core",
       "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.hellohq.report-pack/manifest.json",
-      "manifest_hash_sha256": "677547f133e4e840a387a8c2f909ea1adc63d52d17e0ce921fb3f36d1c3f93e3",
+      "manifest_hash_sha256": "244669ee450e36368dc0a252d1e012c8c21ca2441a1940452f2f4c78a347c4db",
       "permissions": [
         "read:portfolio_names",
         "read:asset_count",
