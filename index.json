@@ -13,7 +13,7 @@
       "trust_tier": "official",
       "provenance": "core",
       "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.hellohq.hello-python/manifest.json",
-      "manifest_hash_sha256": "48887d75a87fb1ec197b937693a20e659cdabcdebecb932e88447539b6482068",
+      "manifest_hash_sha256": "2ac716deba325f95f7e98283dbceadaafe8d0a2837ff469ec0339c33d6f4b1c4",
       "permissions": [
         "read:portfolio_names"
       ],
