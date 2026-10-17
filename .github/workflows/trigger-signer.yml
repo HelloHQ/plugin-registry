@@ -1,0 +1,76 @@
+name: trigger-signer
+
+# Start the signer as soon as a reviewed change lands, instead of waiting for
+# its */15 schedule (GitHub fires that every 3-10 hours in practice, and until
+# it runs the previously signed index manifest no longer pins index.json, so
+# apps reject the registry). The signer is plugin-signing's sign-release
+# workflow; this job only dispatches it. It signs nothing and writes nothing
+# here.
+#
+# It needs a token that can run workflows in HelloHQ/plugin-signing and nothing
+# else: a GitHub App installed on plugin-signing ONLY, with the single
+# permission "Actions: read and write". Its id and private key are the secrets
+# SIGNER_TRIGGER_APP_ID and SIGNER_TRIGGER_APP_PRIVATE_KEY of this repository
+# (do not reuse the signer's own App: that one can bypass this repository's
+# branch ruleset). Until both exist the job only prints a notice, so merging
+# this file changes nothing.
+#
+# Runs on push to main only, so a pull request (which gets no secrets) can
+# never reach the token. The signer's own commits do not retrigger it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - "authors/**"
+      - "index.json"
+  workflow_dispatch:
+
+permissions: {}
+
+# One dispatch per burst of merges; the signer itself serializes its runs.
+concurrency:
+  group: trigger-signer
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # The signer pushes its signatures, certificates and index manifest back to
+    # main with "chore(registry): sign ..." commits (as the signer App); those
+    # must not start another run.
+    if: >-
+      github.repository == 'HelloHQ/plugin-registry' &&
+      github.actor != 'hellohq-plugin-signer[bot]' &&
+      !startsWith(github.event.head_commit.message || '', 'chore(registry): sign')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is the trigger configured?
+        id: cfg
+        env:
+          APP_ID: ${{ secrets.SIGNER_TRIGGER_APP_ID }}
+          APP_KEY: ${{ secrets.SIGNER_TRIGGER_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SIGNER_TRIGGER_APP_ID / SIGNER_TRIGGER_APP_PRIVATE_KEY are not set; the signer will run on its own schedule. A maintainer can dispatch sign-release in HelloHQ/plugin-signing."
+          fi
+
+      - name: Mint a token that can only run workflows in plugin-signing
+        if: steps.cfg.outputs.configured == 'true'
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.SIGNER_TRIGGER_APP_ID }}
+          private-key: ${{ secrets.SIGNER_TRIGGER_APP_PRIVATE_KEY }}
+          owner: HelloHQ
+          repositories: plugin-signing
+          permission-actions: write
+
+      - name: Dispatch the signer
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh workflow run sign-release.yml --repo HelloHQ/plugin-signing --ref main
