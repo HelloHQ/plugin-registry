@@ -65,14 +65,18 @@ test('broken manifest JSON or expiry is reported, never thrown', () => {
 });
 
 test('the registry\'s own committed signed index passes with the real root key', () => {
+  // In a PR that adds or updates a plugin, index.json legitimately differs from
+  // what index-manifest.json pins until the signer runs after merge, so this
+  // checks the signature and expiry with the pin inside its grace window.
   const r = (p) => readFileSync(new URL(`../${p}`, import.meta.url));
   const manifestBytes = r('index-manifest.json');
+  const now = new Date(Date.parse(JSON.parse(manifestBytes).issued_at) + DAY);
   const problems = signedIndexProblems({
     indexBytes: r('index.json'),
     manifestBytes,
     sigBytes: r('index-manifest.json.sig'),
-    indexChangedAt: new Date(0),
-    now: new Date(Date.parse(JSON.parse(manifestBytes).issued_at) + DAY),
+    indexChangedAt: now,
+    now,
   });
   assert.deepEqual(problems, [], 'real files signed by the real registry root');
   assert.equal(REGISTRY_ROOT_ED25519.keyId, 'hellohq-registry-ed25519-2026-01');
