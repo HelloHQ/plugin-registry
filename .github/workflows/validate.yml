@@ -120,6 +120,12 @@ jobs:
       - name: Schema and helper tests
         run: node --test tests/*.test.mjs
 
+      # A Verified plugin carries author-signatures.json, not signatures[].
+      # The Ed25519 half must verify under an enrolled key whose prefix covers
+      # the plugin id. Official and Community plugins must not carry the file.
+      - name: Author signatures match an enrolled prefix
+        run: node scripts/author-signatures.mjs check
+
       # ── Per-manifest checks ─────────────────────────────────────────────────
       - name: Validate all manifests
         env:

@@ -207,7 +207,7 @@
       "minLength": 1,
       "maxLength": 16384,
       "pattern": "^[A-Za-z0-9+/]+={0,2}$",
-      "description": "Doc 25/27: base64 of the EXACT bytes of the registry-issued author certificate (scripts/author-cert.mjs) whose keys made this plugin's signatures[]. Added by the signing pipeline after merge — do not set this yourself. The app verifies the certificate's registry-root signature over these exact bytes, its validity window and its presence in the signed index manifest's valid_author_cert_ids, then verifies signatures[] with the certificate's keys."
+      "description": "Doc 25/27: base64 of the EXACT bytes of the registry-issued author certificate (scripts/author-cert.mjs) whose keys made this plugin's signatures[]. The certificate lists the id_prefixes that author may sign. Added by the signing pipeline after merge — do not set this yourself. The app verifies the certificate's registry-root signature over these exact bytes, its validity window, its presence in the signed index manifest's valid_author_cert_ids, then verifies signatures[] with the certificate's keys. That the plugin id sits under one of the certificate's prefixes is enforced by registry CI and the signing pipeline; the app does not check it yet."
     },
     "author_cert_sig": {
       "type": "object",

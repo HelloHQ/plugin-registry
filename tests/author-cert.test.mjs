@@ -28,6 +28,7 @@ function enroll(slug = 'acme-labs', overrides = {}) {
       ed25519: rawEd25519(publicKey).toString('base64'),
       'ml-dsa-65': randomBytes(1952).toString('base64'),
     },
+    id_prefixes: ['com.acme.'],
     tier: 'author',
     ...overrides,
   };
@@ -56,14 +57,15 @@ function registry(authors, certs = []) {
   return dir;
 }
 
-test('the enrollment statement is seven fixed lines', () => {
+test('the enrollment statement is eight fixed lines', () => {
   const { author } = enroll();
   const lines = enrollmentStatement(author).toString('utf8').split('\n');
   assert.deepEqual(lines.slice(0, 1), ['hellohq-author-enrollment/v1']);
   assert.deepEqual(
     lines.slice(1).map((l) => l.split('=')[0]),
-    ['slug', 'oidc_issuer', 'oidc_subject', 'ed25519', 'ml-dsa-65', 'tier', ''],
+    ['slug', 'oidc_issuer', 'oidc_subject', 'ed25519', 'ml-dsa-65', 'id_prefixes', 'tier', ''],
   );
+  assert.match(lines.find((l) => l.startsWith('id_prefixes=')), /=com\.acme\.$/);
 });
 
 test('a sound enrollment has no problems', () => {
@@ -73,6 +75,7 @@ test('a sound enrollment has no problems', () => {
 test('the proof of possession must verify over the exact record', () => {
   const { author } = enroll();
   assert.match(enrollmentProblems({ ...author, identity: { ...author.identity, oidc_subject: '9999' } }).join(), /proof\.ed25519/);
+  assert.match(enrollmentProblems({ ...author, id_prefixes: ['com.other.'] }).join(), /proof\.ed25519/);
   assert.match(enrollmentProblems({ ...author, slug: 'other-name' }).join(), /proof\.ed25519/);
   const stranger = enroll('acme-labs').author; // someone else's proof
   assert.match(enrollmentProblems({ ...author, proof: stranger.proof }).join(), /proof\.ed25519/);
@@ -88,6 +91,11 @@ test('shape problems are named', () => {
   assert.match(enrollmentProblems({ ...author, public_keys: { ...author.public_keys, 'ml-dsa-65': 'AAAA' } }).join(), /1952/);
   assert.match(enrollmentProblems({ ...author, public_keys: { ...author.public_keys, rsa: 'x' } }).join(), /unknown public_keys/);
   assert.match(enrollmentProblems({ ...author, revoked: 'yes' }).join(), /revoked/);
+  assert.match(enrollmentProblems({ ...author, id_prefixes: [] }).join(), /id_prefixes/);
+  assert.match(enrollmentProblems({ ...author, id_prefixes: ['com.'] }).join(), /two labels/);
+  assert.match(enrollmentProblems({ ...author, id_prefixes: ['com.hellohq.'] }).join(), /reserved/);
+  assert.match(enrollmentProblems({ ...author, id_prefixes: ['com.hellohq.labs.'] }).join(), /reserved/);
+  assert.match(enrollmentProblems({ ...author, id_prefixes: ['com.zeta.', 'com.acme.'] }).join(), /sorted/);
 });
 
 test('the certificate is compact JSON in the order the app parses', () => {
@@ -95,13 +103,22 @@ test('the certificate is compact JSON in the order the app parses', () => {
   const bytes = buildCert(author, { now: NOW, days: 90 });
   const text = bytes.toString('utf8');
   assert.ok(!/\s/.test(text.replace(/"[^"]*"/g, '')), 'no whitespace outside strings');
-  assert.deepEqual(Object.keys(JSON.parse(text)), ['cert_id', 'identity', 'public_keys', 'not_before', 'not_after', 'tier']);
+  assert.deepEqual(Object.keys(JSON.parse(text)), [
+    'cert_id',
+    'identity',
+    'public_keys',
+    'id_prefixes',
+    'not_before',
+    'not_after',
+    'tier',
+  ]);
   const cert = JSON.parse(text);
   assert.equal(cert.cert_id, 'author-acme-labs-2026-10-05');
   assert.equal(cert.not_before, '2026-10-05T10:00:00Z');
   assert.equal(cert.not_after, '2027-01-03T10:00:00Z');
   assert.deepEqual(cert.identity, author.identity);
   assert.deepEqual(cert.public_keys, author.public_keys);
+  assert.deepEqual(cert.id_prefixes, ['com.acme.']);
   assert.equal(cert.tier, 'author');
   assert.deepEqual(buildCert(author, { now: NOW, days: 90 }), bytes, 'deterministic');
 });
@@ -152,12 +169,13 @@ test('revoked and unproven authors are never due a cert', () => {
   assert.deepEqual(authorsNeedingCert(registry([{ ...author, proof: undefined }]), NOW), []);
 });
 
-test('certMatchesAuthor compares identity and both keys', () => {
+test('certMatchesAuthor compares identity, both keys and the prefixes', () => {
   const { author } = enroll();
   const cert = JSON.parse(buildCert(author, { now: NOW }));
   assert.ok(certMatchesAuthor(cert, author));
   assert.ok(!certMatchesAuthor(cert, { ...author, identity: { ...author.identity, oidc_subject: '1' } }));
   assert.ok(!certMatchesAuthor(cert, { ...author, public_keys: { ...author.public_keys, 'ml-dsa-65': randomBytes(1952).toString('base64') } }));
+  assert.ok(!certMatchesAuthor(cert, { ...author, id_prefixes: ['com.other.'] }));
 });
 
 test('stamping needs both algorithms and a real cert id', () => {
@@ -182,4 +200,32 @@ test('check-authors reports problems per file and passes a sound registry', asyn
   assert.deepEqual(authorProblems(registry([author])), []);
   const bad = registry([{ ...author, tier: 'official' }]);
   assert.match(authorProblems(bad).join('\n'), /^authors\/acme-labs\.json: tier/);
+});
+
+test('two enrollments cannot share a key or claim overlapping prefixes', async () => {
+  const { authorProblems } = await import('../scripts/check-authors.mjs');
+  const a = enroll('acme-labs').author;
+  const problems = (...authors) => authorProblems(registry(authors)).join('\n');
+
+  // Distinct keys and disjoint namespaces are fine.
+  assert.equal(problems(a, enroll('widgets', { id_prefixes: ['com.widgets.'] }).author), '');
+  assert.equal(problems(a, enroll('acme-eu', { id_prefixes: ['com.acme-eu.'] }).author), '');
+
+  // The same prefix, a parent of it and a child of it all overlap.
+  for (const prefix of ['com.acme.', 'com.', 'com.acme.tools.']) {
+    const other = enroll('other', { id_prefixes: [prefix] }).author;
+    assert.match(problems(a, other), /authors\/other\.json: id prefix .* overlaps .* authors\/acme-labs\.json/, prefix);
+  }
+
+  // Re-enrolling the same keys under another slug is refused for each algorithm.
+  const reuseEd = enroll('copy', { id_prefixes: ['com.copy.'], public_keys: a.public_keys }).author;
+  assert.match(problems(a, reuseEd), /ed25519 key is already enrolled by authors\/acme-labs\.json/);
+  assert.match(problems(a, reuseEd), /ml-dsa-65 key is already enrolled/);
+  const reuseMl = enroll('copy2', { id_prefixes: ['com.copy2.'] }).author;
+  reuseMl.public_keys['ml-dsa-65'] = a.public_keys['ml-dsa-65'];
+  assert.match(problems(a, reuseMl), /ml-dsa-65 key is already enrolled/);
+
+  // A revoked enrollment still holds its namespace until the file is deleted.
+  const revoked = { ...a, revoked: true };
+  assert.match(problems(revoked, enroll('squatter', { id_prefixes: ['com.acme.'] }).author), /overlaps/);
 });
