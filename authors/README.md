@@ -25,6 +25,15 @@ It shows you hold the key you are enrolling. CI checks it. Every plugin
 signature must verify under both of your keys, so an ML-DSA-65 key you do not
 hold gets you nothing.
 
+**Identity.** `identity` must be `{"oidc_issuer": "https://github.com", "oidc_subject":
+"<your numeric GitHub account id>"}`; find it with `gh api users/<login> --jq .id`.
+Use the number, not the login, which can be renamed. CI refuses an enrollment
+unless the pull request is opened by that account, so you cannot enroll a
+namespace in someone else's name. Changing an enrolled author's identity is not
+allowed; revoke and enroll again. Other issuers are not accepted until the
+registry can verify them. A maintainer may revoke (delete the file, or set
+`"revoked": true` and change nothing else) from any account.
+
 `id_prefixes` is the plugin ids you may sign. Each entry is a dotted namespace
 ending in `.` (`com.example.` covers `com.example.widget` and nothing outside
 it), with at least two labels. `com.hellohq.` is reserved. The proof covers the
