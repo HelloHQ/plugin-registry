@@ -10,10 +10,10 @@
       "categories": [
         "utilities"
       ],
-      "trust_tier": "community",
+      "trust_tier": "verified",
       "provenance": "community",
       "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.calvinx.hello/manifest.json",
-      "manifest_hash_sha256": "b88ff6496b009e4f194927ac4f074a6e9ac55f08b4d2648ca279db09cd376aac",
+      "manifest_hash_sha256": "69e5a05ffae2053bc8d2469a3801bb751173dbd4baae512b2f83ea0bd595fd75",
       "permissions": [
         "read:portfolio_names"
       ],

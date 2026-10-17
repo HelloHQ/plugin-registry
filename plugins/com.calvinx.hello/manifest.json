@@ -18,6 +18,7 @@
   "sidebar_icon": "https://github.com/HelloHQ/plugin-sdk/releases/download/hello-calvinx-v1.0.0/icon.svg",
   "sidebar_icon_hash_sha256": "1ba72ea13822cc56eb626991407efe014def5826832b54b9dede9bb166a575b3",
   "entry_function": "run",
+  "trust_tier": "verified",
   "provenance": "community",
   "licensing": {
     "kind": "open_source",
