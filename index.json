@@ -13,7 +13,7 @@
       "trust_tier": "verified",
       "provenance": "community",
       "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.calvinx.hello/manifest.json",
-      "manifest_hash_sha256": "69e5a05ffae2053bc8d2469a3801bb751173dbd4baae512b2f83ea0bd595fd75",
+      "manifest_hash_sha256": "91adb5d33ab1fdf2ceaa478233c5cecb20cadd4a2f47041a99644695de878ceb",
       "permissions": [
         "read:portfolio_names"
       ],
