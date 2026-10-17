@@ -25,8 +25,10 @@ signature must verify under both of your keys, so an ML-DSA-65 key you do not
 hold gets you nothing.
 
 **Revoking.** Set `"revoked": true`, or delete the file, or change the keys. The
-next signing run (within 15 minutes) drops the certificate from the signed index
-manifest, and apps stop trusting it on their next catalog refresh. No app
+next signing run drops the certificate from the signed index manifest, and apps
+stop trusting it on their next catalog refresh. The signer's schedule is best
+effort (runs can be hours apart), so a maintainer dispatches it straight after
+merging a revocation. No app
 release is involved.
 
 `certs/` is written only by the signing pipeline. A pull request may not add or
