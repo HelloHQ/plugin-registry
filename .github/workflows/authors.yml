@@ -7,8 +7,10 @@ on:
       - "certs/**"
       - "scripts/author-cert.mjs"
       - "scripts/check-authors.mjs"
+      - "scripts/check-enrollment-identity.mjs"
       - "scripts/stamp-author-cert.mjs"
       - "tests/author-cert.test.mjs"
+      - "tests/enrollment-identity.test.mjs"
       - ".github/workflows/authors.yml"
   push:
     branches: [main]
@@ -59,8 +61,17 @@ jobs:
             exit 1
           fi
 
+      # The enrollment names the account that owns the prefixes. Proof of
+      # possession shows the submitter holds the key, not who they are, so the
+      # pull request must be opened by the GitHub account the enrollment claims.
+      - name: The enrollment names the account that opened this pull request
+        if: github.event_name == 'pull_request'
+        env:
+          PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
+        run: node scripts/check-enrollment-identity.mjs "origin/${{ github.base_ref }}"
+
       - name: Enrollments are sound (shape, key lengths, proof of possession)
         run: node scripts/check-authors.mjs
 
       - name: Author certificate tests
-        run: node --test tests/author-cert.test.mjs
+        run: node --test tests/author-cert.test.mjs tests/enrollment-identity.test.mjs
