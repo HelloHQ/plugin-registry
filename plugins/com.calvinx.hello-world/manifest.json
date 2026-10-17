@@ -1,0 +1,25 @@
+{
+  "id": "com.calvinx.hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "A third-party hello-world plugin that lists your portfolio names.",
+  "author": "Calvin Cheng",
+  "author_url": "https://github.com/calvinchengx",
+  "repo": "https://github.com/calvinchengx/hello-world",
+  "license": "Apache-2.0",
+  "categories": ["utilities"],
+  "min_host_version": "1.0.0",
+  "execution_mode": "wasm",
+  "wasm_url": "https://github.com/calvinchengx/hello-world/releases/download/v1.0.0/plugin.wasm",
+  "content_hash_sha256": "f47b15d24082d93c8f45e3022899ba110900dde02b36c6095a8d3959e40bdb6f",
+  "ui_type": "declarative",
+  "sidebar_icon": "https://github.com/calvinchengx/hello-world/releases/download/v1.0.0/icon.svg",
+  "sidebar_icon_hash_sha256": "8072af6a62f76b736e760920d541bf001487d552f113e296043ee1c8a5deae94",
+  "entry_function": "run",
+  "trust_tier": "verified",
+  "provenance": "community",
+  "licensing": { "kind": "open_source", "spdx": "Apache-2.0" },
+  "permissions": [
+    { "id": "read:portfolio_names" }
+  ]
+}
