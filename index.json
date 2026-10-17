@@ -63,6 +63,33 @@
         "kind": "open_source",
         "spdx": "Apache-2.0"
       }
+    },
+    {
+      "id": "com.hellohq.report-pack",
+      "name": "Family Meeting Report Pack",
+      "version": "1.0.0",
+      "description": "Family-meeting report of total assets by portfolio and currency, in English and Simplified Chinese. Saves a Markdown, text or HTML file. Information only.",
+      "author": "HelloHQ",
+      "categories": [
+        "reporting",
+        "finance",
+        "export"
+      ],
+      "trust_tier": "official",
+      "provenance": "core",
+      "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.hellohq.report-pack/manifest.json",
+      "manifest_hash_sha256": "64841f08e8e07603aa584086ead98ccc11181a27868a194f78de6472bde43571",
+      "permissions": [
+        "read:portfolio_names",
+        "read:asset_count",
+        "read:currency_rates",
+        "read:aggregated_values",
+        "write:external_output"
+      ],
+      "licensing": {
+        "kind": "open_source",
+        "spdx": "Apache-2.0"
+      }
     }
   ]
 }
