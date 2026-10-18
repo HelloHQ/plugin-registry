@@ -23,6 +23,27 @@
       }
     },
     {
+      "id": "com.calvinx.hello-world",
+      "name": "Hello World (Calvin)",
+      "version": "1.0.0",
+      "description": "A third-party hello-world plugin that lists your portfolio names.",
+      "author": "Calvin Cheng",
+      "categories": [
+        "utilities"
+      ],
+      "trust_tier": "verified",
+      "provenance": "community",
+      "manifest_url": "https://raw.githubusercontent.com/HelloHQ/plugin-registry/main/plugins/com.calvinx.hello-world/manifest.json",
+      "manifest_hash_sha256": "e82997867074240689cea32551cd733001661ce2f810bcd180a6b9db4dd3d2e3",
+      "permissions": [
+        "read:portfolio_names"
+      ],
+      "licensing": {
+        "kind": "open_source",
+        "spdx": "Apache-2.0"
+      }
+    },
+    {
       "id": "com.hellohq.hello-python",
       "name": "Hello Python",
       "version": "1.0.0",
