@@ -4,6 +4,19 @@ One file per author: `authors/<slug>.json`. Merging it lets the private signing
 pipeline issue the author a certificate (`certs/`), after which their plugins can
 be signed under it. A certificate lasts 90 days and is renewed automatically.
 
+**The easy way** is the `hqplugin` CLI, which makes the keys, builds this file,
+signs the proof and checks it against this registry's rules:
+
+```sh
+hqplugin keys generate --out ~/keys/acme
+hqplugin keys enroll --keys ~/keys/acme --slug acme-labs --prefix com.example. \
+  --github-user your-login --registry-dir <a checkout of this repository>
+hqplugin publish --release --sign-key ~/keys/acme --submit   # every release
+```
+
+The rest of this page is the format underneath, for anyone doing it by hand.
+Full walkthrough: `docs/plugin/08-publishing-guide.md` in the HelloHQ workspace.
+
 ```json
 {
   "slug": "acme-labs",
