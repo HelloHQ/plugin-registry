@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0 # the grace window reads when index.json last changed
 
       - name: Check the signed index and update the watchdog issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const m = await import(`${process.env.GITHUB_WORKSPACE}/scripts/check-signed-index.mjs`);
