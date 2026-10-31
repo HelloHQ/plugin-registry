@@ -5,18 +5,21 @@
 A PR is eligible for fast-merge when **all** of these hold:
 
 - CI is green.
-- No `read:aggregated_values`, no `write:external_output` and no `propose:*`.
+- No `read:aggregated_values`, no `write:external_output`, no `ai:inference` and no `propose:*`.
 - `ui_type` is not `webview`.
 - `execution_mode` is not `sidecar`.
+
+`network:fetch` is allowed at Community tier: CI requires a non-empty `scope.origins`.
+The maintainer still applies checklist items 5 and 8 below before approving, since
+every plugin PR needs maintainer approval.
 
 Fast-merge target: under 1 business day.
 
 ## Security review (Verified tier)
 
 Required when the plugin requests any of: `read:aggregated_values`,
-`write:external_output`, `propose:holdings`, `propose:valuations`, `network:fetch`,
-`ai:inference`, a `webview` UI, or a
-Python `sidecar`. Target: 2–5 business days.
+`write:external_output`, `propose:holdings`, `propose:valuations`, `ai:inference`,
+a `webview` UI, or a Python `sidecar`. Target: 2–5 business days.
 
 The reviewer checklist:
 
@@ -27,7 +30,7 @@ The reviewer checklist:
    `repo` may point to a public stub.
 3. **Author identity** — `author_url` identifies the author of `repo`.
 4. **Binary inspection** — static analysis beyond CI (import/export scan).
-5. **For `network:fetch`** — declared origins are author-owned; no relaying of
+5. **For `network:fetch`** (also checked on Community fast-merge PRs) — declared origins are author-owned; no relaying of
    HelloHQ data to third parties. Justify why `ai:inference` is insufficient.
 6. **For `ai:inference`** — the system prompt cannot exfiltrate data beyond the
    plugin's data permissions, and user input cannot override the system prompt.
