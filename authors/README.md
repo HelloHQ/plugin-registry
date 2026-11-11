@@ -11,19 +11,20 @@ be signed under it. A certificate lasts 90 days and is renewed automatically.
   "id_prefixes": ["com.example."],
   "public_keys": { "ed25519": "<32 bytes, base64>", "ml-dsa-65": "<1952 bytes, base64>" },
   "tier": "author",
-  "proof": { "ed25519": "<64 bytes, base64>" }
+  "proof": { "ed25519": "<64 bytes, base64>", "ml-dsa-65": "<3309 bytes, base64>" }
 }
 ```
 
-`proof.ed25519` is your Ed25519 key's signature over the enrollment statement:
+`proof.ed25519` and `proof.ml-dsa-65` are your two keys' signatures over the
+same enrollment statement:
 
 ```sh
 node scripts/author-cert.mjs statement authors/acme-labs.json   # the bytes to sign
 ```
 
-It shows you hold the key you are enrolling. CI checks it. Every plugin
-signature must verify under both of your keys, so an ML-DSA-65 key you do not
-hold gets you nothing.
+They show you hold both keys you are enrolling. CI verifies both (Node 24.7 or
+later) and refuses an enrollment without either. `hqplugin keys enroll` writes
+the file with both proofs.
 
 **Identity.** `identity` must be `{"oidc_issuer": "https://github.com", "oidc_subject":
 "<your numeric GitHub account id>"}`; find it with `gh api users/<login> --jq .id`.
@@ -50,8 +51,8 @@ node scripts/author-signatures.mjs sign plugins/<id>/manifest.json \
   --ed25519-key ed25519.pem --mldsa-key mldsa65.pem
 ```
 
-The ML-DSA half needs OpenSSL 3.5 or newer (`pkeyutl -sign`). CI verifies the
-Ed25519 half. The app verifies both.
+The ML-DSA half needs OpenSSL 3.5 or newer (`pkeyutl -sign`). CI verifies both
+halves, under the enrolled author's two keys, and so does the app.
 
 **Revoking.** Set `"revoked": true`, or delete the file, or change the keys. The
 next signing run drops the certificate from the signed index manifest, and apps

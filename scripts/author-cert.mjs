@@ -2,8 +2,9 @@
 // Author enrollment and certificate bytes (docs/plugin/25, 27 phase 2).
 //
 // An author is enrolled by a reviewed PR that adds authors/<slug>.json: their
-// OIDC identity, their two public keys, and a proof that they hold the Ed25519
-// key. The private signing pipeline then issues a certificate over those facts
+// OIDC identity, their two public keys, and a proof that they hold each key
+// (an Ed25519 and an ML-DSA-65 signature over the enrollment statement). The
+// private signing pipeline then issues a certificate over those facts
 // with the registry root keys. This file is the one definition of both byte
 // formats; the signer calls it, and tests/fixtures/author-cert-vectors.json
 // pins the output.
@@ -16,10 +17,11 @@
 //   node scripts/author-cert.mjs cert authors/<slug>.json --now <iso> [--days 90]
 //   node scripts/author-cert.mjs valid-ids [--now <iso>]
 //   node scripts/author-cert.mjs needs-cert [--now <iso>]   # slugs to issue for
-import { createPublicKey, verify } from 'node:crypto';
+import { createHash, createPublicKey, verify } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ML_DSA_65_SIG_BYTES, verifyMlDsa65 } from './ml-dsa.mjs';
 
 export const ENROLLMENT_VERSION = 'hellohq-author-enrollment/v1';
 export const DEFAULT_LIFETIME_DAYS = 90;
@@ -68,6 +70,18 @@ export function prefixCovers(prefix, pluginId) {
   return typeof pluginId === 'string' && pluginId.startsWith(prefix) && pluginId.length > prefix.length;
 }
 
+/**
+ * Enrollments merged before the ML-DSA-65 proof was required, by slug: the
+ * SHA-256 of their enrollment statement. Such a record may carry only
+ * proof.ed25519 while its statement stays exactly this; any change to it (keys,
+ * identity, prefixes) needs both proofs. Do not add to this list: a new
+ * enrollment always proves both keys.
+ */
+export const ED25519_ONLY_ENROLLMENTS = Object.freeze({
+  // authors/calvin.json, enrolled 2026-10-17 (d8f3d5a).
+  calvin: '2fdd913cb550c5c0bc3a18caa91af7f7d8c473f5e1d8f3661e14581ed1a71129',
+});
+
 const b64 = (s) => Buffer.from(String(s), 'base64');
 const isB64 = (s, n) =>
   typeof s === 'string' &&
@@ -96,12 +110,20 @@ export function enrollmentStatement(author) {
   );
 }
 
+/** Whether [author] is a pre-existing enrollment that may lack proof.ml-dsa-65. */
+function isEd25519OnlyEnrollment(author, statement) {
+  const pinned = Object.hasOwn(ED25519_ONLY_ENROLLMENTS, author.slug) ? ED25519_ONLY_ENROLLMENTS[author.slug] : null;
+  return pinned !== null && createHash('sha256').update(statement).digest('hex') === pinned;
+}
+
 /**
  * Problems with an enrollment record ([] when sound). Checks the shape, the key
- * lengths, and the Ed25519 proof of possession. The ML-DSA-65 half cannot be
- * proven here (Node 20/22 have no ML-DSA); that is acceptable because every
- * artifact signature must verify under BOTH keys, so someone who binds another
- * party's ML-DSA key still cannot produce a signature that installs.
+ * lengths, and the proof of possession of BOTH keys: proof.ed25519 and
+ * proof.ml-dsa-65 must each verify over the enrollment statement under the
+ * record's own key. Only an enrollment listed in ED25519_ONLY_ENROLLMENTS, with
+ * its statement unchanged, may leave out the ML-DSA-65 proof; one it does
+ * carry must still verify. ML-DSA-65 needs Node 24.7 or later; on an older
+ * Node the check reports a problem instead of passing.
  */
 export function enrollmentProblems(author, { slugFromFile } = {}) {
   const out = [];
@@ -123,6 +145,7 @@ export function enrollmentProblems(author, { slugFromFile } = {}) {
   if (extra.length) out.push(`unknown public_keys: ${extra.join(', ')}`);
   if (author.revoked !== undefined && typeof author.revoked !== 'boolean') out.push('revoked must be a boolean');
   if (out.length) return out;
+  const statement = enrollmentStatement(author);
   try {
     const key = createPublicKey({
       key: Buffer.concat([ED25519_SPKI, b64(keys.ed25519)]),
@@ -130,11 +153,24 @@ export function enrollmentProblems(author, { slugFromFile } = {}) {
       type: 'spki',
     });
     const sig = author.proof?.ed25519;
-    if (!isB64(sig, 64) || !verify(null, enrollmentStatement(author), key, b64(sig))) {
+    if (!isB64(sig, 64) || !verify(null, statement, key, b64(sig))) {
       out.push('proof.ed25519 does not verify over the enrollment statement');
     }
   } catch (e) {
     out.push(`proof check failed: ${e.message}`);
+  }
+  const pq = author.proof?.['ml-dsa-65'];
+  if (pq === undefined && isEd25519OnlyEnrollment(author, statement)) return out;
+  if (pq === undefined) {
+    out.push('proof.ml-dsa-65 is required: sign the enrollment statement with the ML-DSA-65 key too');
+    return out;
+  }
+  try {
+    if (!isB64(pq, ML_DSA_65_SIG_BYTES) || !verifyMlDsa65(statement, b64(keys['ml-dsa-65']), b64(pq))) {
+      out.push('proof.ml-dsa-65 does not verify over the enrollment statement');
+    }
+  } catch (e) {
+    out.push(`proof.ml-dsa-65 check failed: ${e.message}`);
   }
   return out;
 }

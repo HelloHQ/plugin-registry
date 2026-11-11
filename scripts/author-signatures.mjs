@@ -4,9 +4,10 @@
 // A pull request must not write signatures[] or author_cert. An author who
 // holds a hybrid key instead submits plugins/<id>/author-signatures.json:
 // Ed25519 and ML-DSA-65 signatures over the artifact statement
-// (scripts/artifact-statement.mjs). CI checks the Ed25519 half under an
-// enrolled key whose id_prefixes cover the plugin id. Node cannot verify
-// ML-DSA-65, so that half is checked for length here and verified by the app.
+// (scripts/artifact-statement.mjs). CI checks that the Ed25519 half verifies
+// under exactly one enrolled author whose id_prefixes cover the plugin id, and
+// that the ML-DSA-65 half verifies under that same author's ML-DSA-65 key
+// (scripts/ml-dsa.mjs; Node 24.7 or later, and an older Node fails the check).
 //
 // After merge the signing pipeline copies both signatures onto the manifest
 // and attaches the author's current certificate. It does not sign with the
@@ -31,10 +32,11 @@ import {
   loadCerts,
   prefixCovers,
 } from './author-cert.mjs';
+import { ML_DSA_65_SIG_BYTES, verifyMlDsa65 } from './ml-dsa.mjs';
 import { stampAuthorCert, stampSignatures } from './stamp-artifact-signatures.mjs';
 
 export const ED25519_SIG_BYTES = 64;
-export const ML_DSA_65_SIG_BYTES = 3309;
+export { ML_DSA_65_SIG_BYTES };
 const PLACEHOLDER_HASH = '0'.repeat(64);
 const ED25519_SPKI = Buffer.from('302a300506032b6570032100', 'hex');
 
@@ -105,6 +107,19 @@ export function matchingAuthors(authors, pluginId, statement, edSig) {
   return hits;
 }
 
+/**
+ * A problem string when [mlDsaSig] (base64) is not a valid ML-DSA-65 signature
+ * over [statement] under [author]'s enrolled ML-DSA-65 key, else null.
+ */
+export function mlDsaProblem(author, statement, mlDsaSig) {
+  try {
+    if (verifyMlDsa65(statement, b64(author.public_keys['ml-dsa-65']), b64(mlDsaSig))) return null;
+    return `ML-DSA-65 signature does not verify under the ML-DSA-65 key of authors/${author.slug}.json`;
+  } catch (e) {
+    return `ML-DSA-65 signature could not be checked: ${e.message}`;
+  }
+}
+
 /** Problems with every author-signatures.json, and with a Verified plugin that lacks one. */
 export function authorSignatureProblems(registryDir) {
   const authors = loadAuthors(registryDir).map((a) => a.author);
@@ -164,7 +179,10 @@ export function authorSignatureProblems(registryDir) {
       out.push(
         `${sideRel}: Ed25519 signature must verify under exactly one enrolled author whose prefix covers ${manifest.id} (matched ${hits.length})`,
       );
+      continue;
     }
+    const pq = mlDsaProblem(hits[0], statement, parsed.mlDsa65);
+    if (pq) out.push(`${sideRel}: ${pq}`);
   }
   return out;
 }
@@ -233,6 +251,8 @@ export function stampAuthorArtifact(registryDir, manifestPath, now) {
   const hits = matchingAuthors(authors, manifest.id, statement, sigs.ed25519);
   if (hits.length !== 1) throw new Error(`expected one matching author, found ${hits.length}`);
   const author = hits[0];
+  const pq = mlDsaProblem(author, statement, sigs.mlDsa65);
+  if (pq) throw new Error(pq);
   const cert = currentAuthorCert(registryDir, author, now);
   if (!cert) throw new Error(`no current certificate for author ${author.slug}`);
   const certBody = JSON.parse(readFileSync(join(registryDir, 'certs', cert.file), 'utf8'));

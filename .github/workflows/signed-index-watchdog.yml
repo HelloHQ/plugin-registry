@@ -5,7 +5,9 @@ name: signed-index-watchdog
 # that never starts alerts nobody. This checks the outcome from here, on a
 # GitHub-hosted runner (free for this public repo), so it does not depend on
 # the signer's runner: the index manifest must pin index.json (12 h grace),
-# be more than 5 days from expiry, and be signed by the registry root.
+# be more than 5 days from expiry, and carry Ed25519 and ML-DSA-65 signatures
+# that both verify under the registry root keys. github-script runs on the
+# runner's own Node 24, which has ML-DSA.
 # Opens one assigned "Signed index needs attention" issue, comments on it
 # while it fails, and closes it when the check passes again.
 

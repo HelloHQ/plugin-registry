@@ -4,29 +4,50 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { GRACE_HOURS, MIN_DAYS_LEFT, REGISTRY_ROOT_ED25519, signedIndexProblems } from '../scripts/check-signed-index.mjs';
+import {
+  GRACE_HOURS,
+  MIN_DAYS_LEFT,
+  REGISTRY_ROOT_ED25519,
+  REGISTRY_ROOT_ML_DSA_65,
+  signedIndexProblems,
+} from '../scripts/check-signed-index.mjs';
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const rootKey = {
   keyId: 'test-root',
   raw: publicKey.export({ type: 'spki', format: 'der' }).subarray(12).toString('base64'),
 };
+const pqPair = generateKeyPairSync('ml-dsa-65');
+const mlDsaRootKey = {
+  keyId: 'test-root-pq',
+  raw: pqPair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-1952).toString('base64'),
+};
 const NOW = new Date('2026-10-17T00:00:00Z');
 const DAY = 8.64e7;
 const index = Buffer.from('{"schema_version":1,"plugins":[]}\n');
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
-function signed({ indexSha = sha(index), expiresIn = 30 * DAY, key = privateKey, keyId = 'test-root', pq = true } = {}) {
+function signed({
+  indexSha = sha(index),
+  expiresIn = 30 * DAY,
+  key = privateKey,
+  keyId = 'test-root',
+  ed = true,
+  pq = true,
+  pqKey = pqPair.privateKey,
+  pqKeyId = 'test-root-pq',
+} = {}) {
   const manifestBytes = Buffer.from(JSON.stringify({
     schema_version: 1, index_sha256: indexSha, sequence: 6,
     issued_at: '2026-10-16T00:00:00Z', expires_at: new Date(NOW.getTime() + expiresIn).toISOString(),
   }));
-  const signatures = [{ key_id: keyId, sig_alg: 'ed25519', signature: sign(null, manifestBytes, key).toString('base64') }];
-  if (pq) signatures.push({ key_id: 'pq', sig_alg: 'ml-dsa-65', signature: 'AAAA' });
+  const signatures = [];
+  if (ed) signatures.push({ key_id: keyId, sig_alg: 'ed25519', signature: sign(null, manifestBytes, key).toString('base64') });
+  if (pq) signatures.push({ key_id: pqKeyId, sig_alg: 'ml-dsa-65', signature: sign(null, manifestBytes, pqKey).toString('base64') });
   return { manifestBytes, sigBytes: Buffer.from(JSON.stringify({ signatures })) };
 }
 const check = (over = {}, s = signed()) =>
-  signedIndexProblems({ indexBytes: index, ...s, indexChangedAt: new Date(NOW - 30 * DAY), now: NOW, rootKey, ...over });
+  signedIndexProblems({ indexBytes: index, ...s, indexChangedAt: new Date(NOW - 30 * DAY), now: NOW, rootKey, mlDsaRootKey, ...over });
 
 test('a current, unexpired, root-signed index is good', () => {
   assert.deepEqual(check(), []);
@@ -57,6 +78,37 @@ test('a bad, foreign or missing signature is a problem', () => {
   assert.match(check({}, { ...s, sigBytes: Buffer.from('nope') }).join('|'), /\.sig is not valid JSON/);
 });
 
+test('each half is checked: good, bad and missing, for Ed25519 and for ML-DSA-65', () => {
+  // good: both halves verify
+  assert.deepEqual(check({}, signed()), []);
+
+  // Ed25519 bad (another key) and missing
+  const otherEd = generateKeyPairSync('ed25519').privateKey;
+  assert.deepEqual(check({}, signed({ key: otherEd })), [
+    'the Ed25519 signature on index-manifest.json does not verify under the registry root key',
+  ]);
+  assert.deepEqual(check({}, signed({ ed: false })), ['index-manifest.json.sig has no ed25519 signature']);
+
+  // ML-DSA-65 bad (another key, a flipped byte, a wrong length), foreign and missing
+  const otherPq = generateKeyPairSync('ml-dsa-65').privateKey;
+  const badPq = 'the ML-DSA-65 signature on index-manifest.json does not verify under the registry root key';
+  assert.deepEqual(check({}, signed({ pqKey: otherPq })), [badPq]);
+  const s = signed();
+  const body = JSON.parse(s.sigBytes);
+  const pqSig = Buffer.from(body.signatures[1].signature, 'base64');
+  pqSig[100] ^= 1;
+  body.signatures[1].signature = pqSig.toString('base64');
+  assert.deepEqual(check({}, { ...s, sigBytes: Buffer.from(JSON.stringify(body)) }), [badPq]);
+  body.signatures[1].signature = 'AAAA';
+  assert.deepEqual(check({}, { ...s, sigBytes: Buffer.from(JSON.stringify(body)) }), [badPq]);
+  assert.deepEqual(check({}, signed({ pqKeyId: 'someone-else' })), ['the ML-DSA-65 signature is not by test-root-pq']);
+  assert.deepEqual(check({}, signed({ pq: false })), ['index-manifest.json.sig has no ml-dsa-65 signature']);
+
+  // A manifest changed after signing fails both halves.
+  const tampered = { ...s, manifestBytes: Buffer.from(s.manifestBytes.toString().replace('"sequence":6', '"sequence":7')) };
+  assert.equal(check({}, tampered).length, 2);
+});
+
 test('broken manifest JSON or expiry is reported, never thrown', () => {
   assert.deepEqual(check({ manifestBytes: Buffer.from('{') }), ['index-manifest.json is not valid JSON']);
   const s = signed();
@@ -80,6 +132,19 @@ test('the registry\'s own committed signed index passes with the real root key',
   });
   assert.deepEqual(problems, [], 'real files signed by the real registry root');
   assert.equal(REGISTRY_ROOT_ED25519.keyId, 'hellohq-registry-ed25519-2026-01');
+  assert.equal(REGISTRY_ROOT_ML_DSA_65.keyId, 'hellohq-registry-ml-dsa-65-2026-01');
+  assert.equal(Buffer.from(REGISTRY_ROOT_ML_DSA_65.raw, 'base64').length, 1952);
+
+  // The real ML-DSA-65 half is checked too: a changed manifest fails it.
+  const changed = Buffer.from(manifestBytes.toString().replace(/"sequence": *(\d+)/, '"sequence": 999999'));
+  const after = signedIndexProblems({
+    indexBytes: r('index.json'),
+    manifestBytes: changed,
+    sigBytes: r('index-manifest.json.sig'),
+    indexChangedAt: now,
+    now,
+  });
+  assert.ok(after.includes('the ML-DSA-65 signature on index-manifest.json does not verify under the registry root key'));
 });
 
 // ── the watchdog issue ──────────────────────────────────────────────────────

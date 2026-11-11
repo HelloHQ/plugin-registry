@@ -8,6 +8,7 @@ on:
       - "scripts/author-cert.mjs"
       - "scripts/check-authors.mjs"
       - "scripts/check-enrollment-identity.mjs"
+      - "scripts/ml-dsa.mjs"
       - "scripts/stamp-author-cert.mjs"
       - "tests/author-cert.test.mjs"
       - "tests/enrollment-identity.test.mjs"
@@ -19,6 +20,7 @@ on:
       - "certs/**"
       - "scripts/author-cert.mjs"
       - "scripts/check-authors.mjs"
+      - "scripts/ml-dsa.mjs"
       - "tests/author-cert.test.mjs"
 
 permissions:
@@ -33,9 +35,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Node 24.7+ (OpenSSL 3.5) verifies the ML-DSA-65 proof of possession.
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       # Certificates are written only by the signing pipeline, after merge. A
       # PR that adds or edits one could otherwise pass off a forged
@@ -70,7 +73,7 @@ jobs:
           PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
         run: node scripts/check-enrollment-identity.mjs "origin/${{ github.base_ref }}"
 
-      - name: Enrollments are sound (shape, key lengths, proof of possession)
+      - name: Enrollments are sound (shape, key lengths, proof of possession of both keys)
         run: node scripts/check-authors.mjs
 
       - name: Author certificate tests

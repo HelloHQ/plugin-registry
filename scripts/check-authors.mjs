@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Validate every authors/<slug>.json enrollment (shape, key lengths and the
-// Ed25519 proof of possession), and that no two enrollments share a key or
+// proof of possession of both keys, Ed25519 and ML-DSA-65), and that no two enrollments share a key or
 // claim overlapping id prefixes. Exits 1 and prints one line per problem.
 //
 //   node scripts/check-authors.mjs [registry dir]
+//
+// Needs Node 24.7 or later for ML-DSA-65; an older Node reports every
+// enrollment as a problem rather than passing it.
 import { fileURLToPath } from 'node:url';
 import { enrollmentProblems, loadAuthors } from './author-cert.mjs';
 

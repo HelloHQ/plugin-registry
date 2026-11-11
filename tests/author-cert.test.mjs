@@ -3,10 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  ED25519_ONLY_ENROLLMENTS,
   authorsNeedingCert,
   buildCert,
   certMatchesAuthor,
@@ -17,23 +18,29 @@ import {
 import { certFile } from '../scripts/stamp-author-cert.mjs';
 
 const rawEd25519 = (publicKey) => publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
+const rawMlDsa65 = (publicKey) => publicKey.export({ format: 'der', type: 'spki' }).subarray(-1952);
 
-/** A sound enrollment record, with a real Ed25519 proof. */
+/** A sound enrollment record, with real Ed25519 and ML-DSA-65 proofs. */
 function enroll(slug = 'acme-labs', overrides = {}) {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const pq = generateKeyPairSync('ml-dsa-65');
   const author = {
     slug,
     identity: { oidc_issuer: 'https://github.com', oidc_subject: '4242' },
     public_keys: {
       ed25519: rawEd25519(publicKey).toString('base64'),
-      'ml-dsa-65': randomBytes(1952).toString('base64'),
+      'ml-dsa-65': rawMlDsa65(pq.publicKey).toString('base64'),
     },
     id_prefixes: ['com.acme.'],
     tier: 'author',
     ...overrides,
   };
-  author.proof = { ed25519: sign(null, enrollmentStatement(author), privateKey).toString('base64') };
-  return { author, privateKey };
+  const statement = enrollmentStatement(author);
+  author.proof = {
+    ed25519: sign(null, statement, privateKey).toString('base64'),
+    'ml-dsa-65': sign(null, statement, pq.privateKey).toString('base64'),
+  };
+  return { author, privateKey, mlDsaPrivateKey: pq.privateKey };
 }
 
 const NOW = '2026-10-05T10:00:00Z';
@@ -80,6 +87,60 @@ test('the proof of possession must verify over the exact record', () => {
   const stranger = enroll('acme-labs').author; // someone else's proof
   assert.match(enrollmentProblems({ ...author, proof: stranger.proof }).join(), /proof\.ed25519/);
   assert.match(enrollmentProblems({ ...author, proof: undefined }).join(), /proof\.ed25519/);
+});
+
+test('both proofs of possession are checked: good, bad and missing', () => {
+  const { author, privateKey, mlDsaPrivateKey } = enroll();
+  const statement = enrollmentStatement(author);
+  const withProof = (proof) => enrollmentProblems({ ...author, proof });
+  const ed = author.proof.ed25519;
+  const pq = author.proof['ml-dsa-65'];
+
+  // good: both verify
+  assert.deepEqual(withProof({ ed25519: ed, 'ml-dsa-65': pq }), []);
+
+  // Ed25519 bad (another key) and missing, with a good ML-DSA-65 proof
+  const otherEd = sign(null, statement, generateKeyPairSync('ed25519').privateKey).toString('base64');
+  assert.deepEqual(withProof({ ed25519: otherEd, 'ml-dsa-65': pq }), ['proof.ed25519 does not verify over the enrollment statement']);
+  assert.deepEqual(withProof({ 'ml-dsa-65': pq }), ['proof.ed25519 does not verify over the enrollment statement']);
+
+  // ML-DSA-65 bad (another key, a flipped byte, a wrong length) and missing, with a good Ed25519 proof
+  const badPq = ['proof.ml-dsa-65 does not verify over the enrollment statement'];
+  const otherPq = sign(null, statement, generateKeyPairSync('ml-dsa-65').privateKey).toString('base64');
+  assert.deepEqual(withProof({ ed25519: ed, 'ml-dsa-65': otherPq }), badPq);
+  const flipped = Buffer.from(pq, 'base64');
+  flipped[7] ^= 1;
+  assert.deepEqual(withProof({ ed25519: ed, 'ml-dsa-65': flipped.toString('base64') }), badPq);
+  assert.deepEqual(withProof({ ed25519: ed, 'ml-dsa-65': 'AAAA' }), badPq);
+  assert.deepEqual(withProof({ ed25519: ed }), [
+    'proof.ml-dsa-65 is required: sign the enrollment statement with the ML-DSA-65 key too',
+  ]);
+
+  // The ML-DSA-65 proof covers the exact record, like the Ed25519 one.
+  const moved = { ...author, id_prefixes: ['com.other.'] };
+  moved.proof = { ...author.proof, ed25519: sign(null, enrollmentStatement(moved), privateKey).toString('base64') };
+  assert.deepEqual(enrollmentProblems(moved), badPq);
+  moved.proof['ml-dsa-65'] = sign(null, enrollmentStatement(moved), mlDsaPrivateKey).toString('base64');
+  assert.deepEqual(enrollmentProblems(moved), []);
+});
+
+test('only the listed pre-existing enrollment may lack the ML-DSA-65 proof, and only unchanged', () => {
+  const calvin = JSON.parse(readFileSync(new URL('../authors/calvin.json', import.meta.url), 'utf8'));
+  assert.equal(calvin.proof['ml-dsa-65'], undefined, 'calvin enrolled before the ML-DSA-65 proof existed');
+  assert.deepEqual(Object.keys(ED25519_ONLY_ENROLLMENTS), ['calvin']);
+  assert.deepEqual(enrollmentProblems(calvin, { slugFromFile: 'calvin' }), []);
+
+  // Any change to the record ends the exemption (the Ed25519 proof fails too).
+  const changed = { ...calvin, id_prefixes: ['com.calvinx.', 'org.calvinx.'] };
+  assert.ok(enrollmentProblems(changed).includes('proof.ml-dsa-65 is required: sign the enrollment statement with the ML-DSA-65 key too'));
+  // A wrong ML-DSA-65 proof on it is still refused.
+  const wrong = { ...calvin, proof: { ...calvin.proof, 'ml-dsa-65': 'AAAA' } };
+  assert.deepEqual(enrollmentProblems(wrong), ['proof.ml-dsa-65 does not verify over the enrollment statement']);
+  // Another slug with only an Ed25519 proof is refused.
+  const { author } = enroll();
+  assert.deepEqual(enrollmentProblems({ ...author, proof: { ed25519: author.proof.ed25519 } }), [
+    'proof.ml-dsa-65 is required: sign the enrollment statement with the ML-DSA-65 key too',
+  ]);
 });
 
 test('shape problems are named', () => {
